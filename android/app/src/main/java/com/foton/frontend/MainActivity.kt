@@ -3,6 +3,7 @@ package com.foton.frontend
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -50,11 +51,23 @@ class MainActivity : Activity() {
             }
         }
         setContentView(root)
+        applyBarAppearance()
         val saved = prefs.getString(KEY_URL, null)
         if (saved.isNullOrBlank()) {
             promptForUrl(null)
         } else {
             webView.loadUrl(saved)
+        }
+    }
+
+    private fun applyBarAppearance() {
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        val decor = window.decorView
+        decor.isAppearanceLightStatusBars = !night
+        decor.isAppearanceLightNavigationBars = !night
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
         }
     }
 
