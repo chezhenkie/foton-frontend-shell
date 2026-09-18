@@ -63,9 +63,9 @@ class MainActivity : Activity() {
     private fun applyBarAppearance() {
         val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
-        val decor = window.decorView
-        decor.isAppearanceLightStatusBars = !night
-        decor.isAppearanceLightNavigationBars = !night
+        val controller = window.insetsController ?: return
+        controller.setAppearanceLightStatusBars(!night)
+        controller.setAppearanceLightNavigationBars(!night)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
