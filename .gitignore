@@ -1,0 +1,12 @@
+/target
+foton-api-bridge.port
+*.WebView2/
+test-run-*/
+sniff-results/
+__pycache__/
+android/.gradle/
+android/local.properties
+android/build/
+android/app/build/
+android/.kotlin/
+android/dist/

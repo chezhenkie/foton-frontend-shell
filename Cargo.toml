@@ -1,0 +1,20 @@
+[package]
+name = "foton-frontend-shell"
+version = "0.1.1"
+edition = "2021"
+license = "MIT"
+description = "Frontend container process: native window + webview for the foton web UI."
+
+[dependencies]
+wry = "0.56"
+tao = "0.36"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
