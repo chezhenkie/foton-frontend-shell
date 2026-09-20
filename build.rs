@@ -1,7 +1,7 @@
 fn main() {
     #[cfg(windows)]
     {
-        const VERSION: &str = "0.1.2.0";
+        const VERSION: &str = "0.1.3.0";
         let mut res = winres::WindowsResource::new();
         res.set_icon("assets/icon.ico");
         res.set("ProductName", "foton-frontend-shell");
