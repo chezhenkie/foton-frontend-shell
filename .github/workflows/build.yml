@@ -20,7 +20,7 @@ jobs:
             bin: foton-frontend-shell
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux webview deps
         if: runner.os == 'Linux'
