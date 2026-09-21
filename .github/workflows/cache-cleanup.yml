@@ -1,0 +1,60 @@
+name: cache-cleanup
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Fetch caches
+        id: list
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${{ github.repository }}/actions/caches" \
+            --jq '.actions_caches[] | [.id, .key, .ref, .created_at, (.last_accessed_at // .created_at)] | @tsv' > caches.txt
+          wc -l < caches.txt
+
+      - name: Delete branch caches older than 7 days
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cutoff=$(date -u -d "7 days ago" +%s)
+          while IFS=$'\t' read -r id key ref created accessed; do
+            if [ "$ref" != "refs/heads/main" ]; then
+              t=$(date -u -d "$accessed" +%s)
+              if [ "$t" -lt "$cutoff" ]; then
+                gh api -X DELETE "repos/${{ github.repository }}/actions/caches/$id" > /dev/null 2>&1 || true
+                echo "deleted branch cache $id ($key)"
+              fi
+            fi
+          done < caches.txt
+
+      - name: Delete main caches except newest per key-prefix
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -F'\t' '$3 == "refs/heads/main" { print }' caches.txt > main.txt
+          while IFS=$'\t' read -r id key ref created accessed; do
+            prefix=${key%-*}
+            if [ "$created" \> "${best[$prefix]}" ] 2>/dev/null || [ -z "${best[$prefix]}" ]; then
+              best[$prefix]=$created
+              bestid[$prefix]=$id
+            fi
+          done < main.txt
+          while IFS=$'\t' read -r id key ref created accessed; do
+            prefix=${key%-*}
+            if [ "$id" != "${bestid[$prefix]}" ]; then
+              gh api -X DELETE "repos/${{ github.repository }}/actions/caches/$id" > /dev/null 2>&1 || true
+              echo "deleted stale main cache $id ($key)"
+            fi
+          done < main.txt
