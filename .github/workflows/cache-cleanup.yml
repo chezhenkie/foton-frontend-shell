@@ -44,6 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           awk -F'\t' '$3 == "refs/heads/main" { print }' caches.txt > main.txt
+          declare -A best bestid
           while IFS=$'\t' read -r id key ref created accessed; do
             prefix=${key%-*}
             if [ "$created" \> "${best[$prefix]}" ] 2>/dev/null || [ -z "${best[$prefix]}" ]; then
