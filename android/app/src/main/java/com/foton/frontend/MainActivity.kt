@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -21,12 +22,19 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.PopupMenu
 import android.widget.Toast
 
 class MainActivity : Activity() {
 
     private lateinit var webView: WebView
+    private lateinit var overflow: ImageButton
     private lateinit var prefs: SharedPreferences
+
+    // Single source of truth for fullscreen. Written by the page bridge, the
+    // overflow menu and the back gesture - all of them go through
+    // setFullscreen, so the page and the system bars can never disagree.
     private var fullscreen = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,6 +50,20 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
+        val margin = (OVERFLOW_MARGIN_DP * resources.displayMetrics.density).toInt()
+        overflow = ImageButton(this)
+        overflow.setImageResource(android.R.drawable.ic_menu_more)
+        overflow.contentDescription = "foton menu"
+        overflow.setBackgroundColor(OVERFLOW_SCRIM)
+        root.addView(
+            overflow,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.END
+            ).apply { setMargins(margin, margin, margin, margin) }
+        )
+        overflow.setOnClickListener { showOverflowMenu() }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.setDecorFitsSystemWindows(false)
             root.setOnApplyWindowInsetsListener { view, insets ->
@@ -83,7 +105,7 @@ class MainActivity : Activity() {
         webView.addJavascriptInterface(object {
             @JavascriptInterface
             fun fullscreen(on: Boolean) {
-                runOnUiThread { setBarsHidden(on) }
+                runOnUiThread { setFullscreen(on) }
             }
         }, "fotonHost")
         webView.webViewClient = object : WebViewClient() {
@@ -114,15 +136,22 @@ class MainActivity : Activity() {
             "  function emitChange() {" +
             "    document.dispatchEvent(new Event('fullscreenchange'));" +
             "  }" +
-            "  Element.prototype.requestFullscreen = function () {" +
-            "    active = true;" +
+            "  function applyState(on) {" +
+            "    active = on;" +
             "    emitChange();" +
+            "  }" +
+            "  window.__fotonSetFullscreen = function (on) {" +
+            "    on = !!on;" +
+            "    if (on === active) { return; }" +
+            "    applyState(on);" +
+            "  };" +
+            "  Element.prototype.requestFullscreen = function () {" +
+            "    applyState(true);" +
             "    fotonHost.fullscreen(true);" +
             "    return Promise.resolve();" +
             "  };" +
             "  Document.prototype.exitFullscreen = function () {" +
-            "    active = false;" +
-            "    emitChange();" +
+            "    applyState(false);" +
             "    fotonHost.fullscreen(false);" +
             "    return Promise.resolve();" +
             "  };" +
@@ -135,7 +164,38 @@ class MainActivity : Activity() {
             "    get: function () { return true; }" +
             "  });" +
             "})();"
-        view.evaluateJavascript(shim, null)
+        // The callback runs once the shim exists, so a page that reloads while
+        // fullscreen is healed instead of ending up with hidden bars and a
+        // document that believes it is windowed.
+        view.evaluateJavascript(shim) { pushFullscreenState() }
+    }
+
+    private fun setFullscreen(on: Boolean) {
+        if (fullscreen != on) {
+            fullscreen = on
+            setBarsHidden(on)
+        }
+        updateOverflow()
+        pushFullscreenState()
+    }
+
+    private fun toggleFullscreen() {
+        setFullscreen(!fullscreen)
+    }
+
+    // Host -> page. Idempotent on the page side: the shim ignores a push that
+    // matches its own state, so this can never bounce back into the bridge.
+    private fun pushFullscreenState() {
+        webView.evaluateJavascript(
+            "window.__fotonSetFullscreen && window.__fotonSetFullscreen($fullscreen);",
+            null
+        )
+    }
+
+    private fun updateOverflow() {
+        if (this::overflow.isInitialized) {
+            overflow.visibility = if (fullscreen) View.GONE else View.VISIBLE
+        }
     }
 
     private fun setBarsHidden(hidden: Boolean) {
@@ -195,13 +255,28 @@ class MainActivity : Activity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(Menu.NONE, MENU_URL, Menu.NONE, "Server URL...")
-        menu.add(Menu.NONE, MENU_FULLSCREEN, Menu.NONE, if (fullscreen) "Exit fullscreen" else "Fullscreen")
+        addMenuItems(menu)
         return super.onCreateOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
+        return handleMenuItem(item.itemId) || super.onOptionsItemSelected(item)
+    }
+
+    private fun addMenuItems(menu: Menu) {
+        menu.add(Menu.NONE, MENU_URL, Menu.NONE, "Server URL...")
+        menu.add(Menu.NONE, MENU_FULLSCREEN, Menu.NONE, if (fullscreen) "Exit fullscreen" else "Fullscreen")
+    }
+
+    private fun showOverflowMenu() {
+        val popup = PopupMenu(this, overflow)
+        addMenuItems(popup.menu)
+        popup.setOnMenuItemClickListener { item -> handleMenuItem(item.itemId) }
+        popup.show()
+    }
+
+    private fun handleMenuItem(id: Int): Boolean {
+        return when (id) {
             MENU_URL -> {
                 promptForUrl(prefs.getString(KEY_URL, null))
                 true
@@ -211,36 +286,19 @@ class MainActivity : Activity() {
                 invalidateOptionsMenu()
                 true
             }
-            else -> super.onOptionsItemSelected(item)
+            else -> false
         }
     }
 
     private fun toggleFullscreen() {
-        fullscreen = !fullscreen
-        val window = window
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val controller: WindowInsetsController = window.insetsController ?: return
-            if (fullscreen) {
-                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                controller.systemBarsBehavior =
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                controller.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            val flags = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            @Suppress("DEPRECATION")
-            webView.systemUiVisibility = if (fullscreen) flags else View.SYSTEM_UI_FLAG_VISIBLE
-        }
+        setFullscreen(!fullscreen)
     }
 
     override fun onBackPressed() {
+        if (fullscreen) {
+            setFullscreen(false)
+            return
+        }
         if (webView.canGoBack()) {
             webView.goBack()
         } else {
@@ -258,5 +316,10 @@ class MainActivity : Activity() {
         private const val KEY_URL = "server_url"
         private const val MENU_URL = 1
         private const val MENU_FULLSCREEN = 2
+        private const val OVERFLOW_MARGIN_DP = 8
+
+        // Translucent light scrim so the dark platform overflow glyph stays
+        // readable over both a light and a dark page.
+        private val OVERFLOW_SCRIM = 0x99FFFFFF.toInt()
     }
 }
