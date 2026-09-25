@@ -290,10 +290,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun toggleFullscreen() {
-        setFullscreen(!fullscreen)
-    }
-
     override fun onBackPressed() {
         if (fullscreen) {
             setFullscreen(false)

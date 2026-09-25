@@ -32,7 +32,6 @@ trigger, so it never had this class of bug) and the exe stays at 0.1.3.
   against a DOM stub in Node, 21 assertions covering page-driven request/exit,
   the host push, both idempotency guards, the reload heal and the no-bounce
   rule. It cannot drift from the source because it reads the source.
-
 ## 2026-09-25 (docs)
 
 Docs only, no shell change, no version bump. New ARCHITECTURE.md covers the

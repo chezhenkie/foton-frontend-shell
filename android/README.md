@@ -9,7 +9,7 @@ Firebase, no analytics) - consistent with the foton zero-Google rule.
 
 | Language | Where | Size |
 | --- | --- | --- |
-| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 325 lines, one file, one class |
+| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 321 lines, one file, one class |
 | Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 47 lines, no `dependencies {}` block anywhere |
 | XML | `AndroidManifest.xml` + 7 resource files | 59 lines |
 
