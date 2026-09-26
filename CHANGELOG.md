@@ -26,9 +26,10 @@ the web app), so the native gear and its menu turned sideways next to it.
   60% white scrim is gone. `res/drawable/ic_menu_gear.xml` is a vector gear in
   `#7C4DFF` (24dp, 8 teeth, centre hole) and the button carries no plate - only
   the theme ripple marks a touch. The panel is a rounded
-  `colorBackgroundFloating` rect with a `colorOutline` hairline and
-  `colorControlHighlight` row ripples, all resolved from the theme, so it
-  follows light and dark.
+  `colorBackgroundFloating` rect at 8dp elevation with `colorControlHighlight`
+  row ripples, all resolved from the theme, so it follows light and dark. No
+  border: `android.R.attr.colorOutline` is not public API (0 hits in AOSP
+  `core/api/current.txt`).
 - **`PopupMenu` replaced by `PopupWindow`.** `PopupMenu` gives no access to its
   content view, and there is no supported way to turn one. Same three items in
   the same order, same shared `handleMenuItem`, same handlers; the dead

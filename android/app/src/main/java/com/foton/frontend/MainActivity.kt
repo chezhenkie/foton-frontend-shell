@@ -434,8 +434,9 @@ class MainActivity : Activity() {
         val turned = overlayTurnsClockwise()
         val windowWidth = if (turned) naturalHeight else naturalWidth
         val windowHeight = if (turned) naturalWidth else naturalHeight
-        panel.pivotXMode = View.PIVOT_X_EXPLICIT
-        panel.pivotYMode = View.PIVOT_Y_EXPLICIT
+        // setPivotX/Y are the public half of this: the javadoc says the pivot
+        // is centred by default and that setting it makes it explicit, which is
+        // the centre this geometry assumes. There is no public PIVOT_X_EXPLICIT.
         panel.pivotX = naturalWidth / 2f
         panel.pivotY = naturalHeight / 2f
         panel.rotation = if (turned) OVERLAY_TURN else 0f
@@ -449,7 +450,7 @@ class MainActivity : Activity() {
             panel,
             FrameLayout.LayoutParams(naturalWidth, naturalHeight, Gravity.TOP or Gravity.START)
         )
-        val popup = PopupWindow(windowWidth, windowHeight, false)
+        val popup = PopupWindow(windowWidth, windowHeight)
         popup.isFocusable = true
         popup.isOutsideTouchable = true
         popup.elevation = dp(MENU_PANEL_ELEVATION_DP).toFloat()
@@ -481,7 +482,6 @@ class MainActivity : Activity() {
         shape = GradientDrawable.RECTANGLE
         cornerRadius = dp(MENU_PANEL_RADIUS_DP).toFloat()
         setColor(getColor(android.R.attr.colorBackgroundFloating))
-        setStroke(dp(MENU_PANEL_STROKE_DP), getColor(android.R.attr.colorOutline))
     }
 
     private fun handleMenuItem(id: Int): Boolean {
@@ -541,7 +541,6 @@ class MainActivity : Activity() {
         private const val MENU_ROW_MIN_WIDTH_DP = 200f
         private const val MENU_ROW_PAD_DP = 16f
         private const val MENU_PANEL_RADIUS_DP = 10f
-        private const val MENU_PANEL_STROKE_DP = 1f
         private const val MENU_PANEL_ELEVATION_DP = 8f
     }
 }

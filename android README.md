@@ -9,7 +9,7 @@ Firebase, no analytics) - consistent with the foton zero-Google rule.
 
 | Language | Where | Size |
 | --- | --- | --- |
-| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 547 lines, one file, one class |
+| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 546 lines, one file, one class |
 | Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 80 lines, no `dependencies {}` block anywhere |
 | XML | `AndroidManifest.xml` + 9 resource files | 107 lines |
 
@@ -42,8 +42,12 @@ The overflow button is the only chrome the shell draws: a purple gear
 ripple marks a touch), so it reads on a light and a dark page without a scrim.
 It opens a `PopupWindow` carrying the three items - Refresh, Server URL...,
 Fullscreen - which are the same items the (framework) options menu would carry,
-and it is the reason they are reachable at all - see Known gaps history. It is
-hidden while fullscreen, so immersive really is immersive. The panel is a
+and it is the reason they are reachable at all - see Known gaps history. The
+panel is a rounded `colorBackgroundFloating` rect at 8dp elevation with
+`colorControlHighlight` row ripples, all resolved from the theme, so it follows
+light and dark. It has no border: `android.R.attr.colorOutline` is not public
+API (0 hits in AOSP `core/api/current.txt`), and elevation carries the edge.
+It is hidden while fullscreen, so immersive really is immersive. The panel is a
 focusable window of its own, so `onBackPressed` closes it first: back never
 leaves fullscreen or the page while the menu is open.
 

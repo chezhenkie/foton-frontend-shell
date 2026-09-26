@@ -23,7 +23,7 @@ Shared responsibilities, identical on all three targets:
 | --- | --- | --- | --- | --- | --- |
 | Windows x64 | Rust 2021 | `src/main.rs` (419 lines) + `build.rs` (16) | tao Win32 window + wry WebView2 | cargo, winres build script | `foton-frontend-shell.exe` |
 | Linux x64 | Rust 2021 | same sources as Windows | tao GTK window + wry WebKitGTK 4.1 | cargo | `foton-frontend-shell` |
-| Android | Kotlin | `android/app/src/main/java/com/foton/frontend/MainActivity.kt` (547 lines) | platform `Activity` + platform `WebView` (Chromium) | Gradle + AGP | `app-debug.apk` |
+| Android | Kotlin | `android/app/src/main/java/com/foton/frontend/MainActivity.kt` (546 lines) | platform `Activity` + platform `WebView` (Chromium) | Gradle + AGP | `app-debug.apk` |
 
 One Rust binary covers Windows and Linux; the split is compile-time, through
 `cfg`, not runtime. The Android app is a separate codebase by necessity: it is
@@ -35,7 +35,7 @@ JavaScript shim, not the code.
 | Language | Where | Size | Notes |
 | --- | --- | --- | --- |
 | Rust | `src/main.rs`, `build.rs` | 435 lines | edition 2021, deps `wry` 0.56 + `tao` 0.36, `winres` 0.1 as a Windows-only build dep; `#[cfg(test)]` unit tests included |
-| Kotlin | `MainActivity.kt` | 547 lines | one file, one class, zero Java sources in the repo |
+| Kotlin | `MainActivity.kt` | 546 lines | one file, one class, zero Java sources in the repo |
 | Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 80 lines | no `dependencies {}` block anywhere |
 | XML | manifest + 9 resource files | 107 lines | manifest, 2 themes (`values` + `values-v29`), strings, 2 launcher icon layers, adaptive icon, the overflow gear, the menu row ripple, network security config |
 | Python | `tools/make_icon.py` | 163 lines | stdlib only (`math`, `os`, `struct`, `zlib`), pure-python 4x supersampled rasterizer |
