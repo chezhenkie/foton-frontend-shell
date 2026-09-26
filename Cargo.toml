@@ -6,7 +6,7 @@ license = "MIT"
 description = "Frontend container process: native window + webview for the foton web UI."
 
 [dependencies]
-wry = "0.56"
+wry = "0.57"
 tao = "0.36"
 
 [target.'cfg(windows)'.build-dependencies]
