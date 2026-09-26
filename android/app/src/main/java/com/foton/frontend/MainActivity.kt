@@ -264,6 +264,7 @@ class MainActivity : Activity() {
     }
 
     private fun addMenuItems(menu: Menu) {
+        menu.add(Menu.NONE, MENU_REFRESH, Menu.NONE, "Refresh")
         menu.add(Menu.NONE, MENU_URL, Menu.NONE, "Server URL...")
         menu.add(Menu.NONE, MENU_FULLSCREEN, Menu.NONE, if (fullscreen) "Exit fullscreen" else "Fullscreen")
     }
@@ -277,6 +278,10 @@ class MainActivity : Activity() {
 
     private fun handleMenuItem(id: Int): Boolean {
         return when (id) {
+            MENU_REFRESH -> {
+                webView.reload()
+                true
+            }
             MENU_URL -> {
                 promptForUrl(prefs.getString(KEY_URL, null))
                 true
@@ -310,6 +315,7 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS_NAME = "foton_prefs"
         private const val KEY_URL = "server_url"
+        private const val MENU_REFRESH = 3
         private const val MENU_URL = 1
         private const val MENU_FULLSCREEN = 2
         private const val OVERFLOW_MARGIN_DP = 8

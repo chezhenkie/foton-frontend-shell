@@ -9,7 +9,7 @@ Firebase, no analytics) - consistent with the foton zero-Google rule.
 
 | Language | Where | Size |
 | --- | --- | --- |
-| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 321 lines, one file, one class |
+| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 326 lines, one file, one class |
 | Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 47 lines, no `dependencies {}` block anywhere |
 | XML | `AndroidManifest.xml` + 7 resource files | 59 lines |
 
@@ -35,10 +35,20 @@ Activity (com.foton.frontend.MainActivity, FotonTheme)
 
 The overflow button is the only chrome the shell draws: the platform glyph
 `android.R.drawable.ic_menu_more` on a 60% white scrim, so it stays readable
-over a light and a dark page. It opens a `PopupMenu` with the same two items
-the (framework) options menu would carry, and it is the reason those items are
-reachable at all - see Known gaps history. It is hidden while fullscreen, so
-immersive really is immersive.
+over a light and a dark page. It opens a `PopupMenu` carrying the three items -
+Refresh, Server URL..., Fullscreen - which are the same items the (framework)
+options menu would carry, and it is the reason they are reachable at all - see
+Known gaps history. It is hidden while fullscreen, so immersive really is
+immersive.
+
+| Item | id | Action |
+| --- | --- | --- |
+| Refresh | 3 | `webView.reload()` |
+| Server URL... | 1 | prompt prefilled with the stored URL |
+| Fullscreen / Exit fullscreen | 2 | `toggleFullscreen()`, label follows the flag |
+
+A refresh while fullscreen keeps fullscreen: the shim is re-injected on
+`onPageFinished` and re-asserts the host state.
 
 On API 30+ the root gets `setOnApplyWindowInsetsListener` and is padded by the
 `systemBars()` insets while `window.setDecorFitsSystemWindows(false)` lets the
@@ -202,10 +212,10 @@ gitignored, so no machine path is committed.
 3. First launch prompts for the server URL. Three equivalent forms: `http://<tailscale-ip>:8765/`, `http://<host>.<tailnet>.ts.net:8765/` (full MagicDNS), or `http://<host>:8765/` (short MagicDNS).
 4. Phone must run the Tailscale app so it can reach the bridge.
 
-Overflow button, top-right of the WebView: change the server URL, toggle
-fullscreen. A URL is validated before it is saved, and a saved URL that fails to
-load (typo, unreachable host) is dropped automatically with a fresh prompt - a
-wrong URL can never stick.
+Overflow button, top-right of the WebView: refresh the page, change the server
+URL, toggle fullscreen. A URL is validated before it is saved, and a saved URL
+that fails to load (typo, unreachable host) is dropped automatically with a
+fresh prompt - a wrong URL can never stick.
 
 ## Server config on the bridge
 
@@ -278,7 +288,7 @@ overflow button) is on-device and not covered by it.
   `onOptionsItemSelected` exist and are correct, but both themes are
   `NoActionBar` and there is no Toolbar (no AppCompat or Material on the
   classpath), so the platform never shows it. The overflow button covers the
-  same two items through the shared `handleMenuItem`; if an action bar is ever
+  same three items through the shared `handleMenuItem`; if an action bar is ever
   added, the platform path lights up for free.
 - The overflow button overlays the page's top-right corner. If the web UI puts
   something interactive there, the button has to move.

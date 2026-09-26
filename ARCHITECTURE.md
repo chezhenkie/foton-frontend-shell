@@ -35,7 +35,7 @@ JavaScript shim, not the code.
 | Language | Where | Size | Notes |
 | --- | --- | --- | --- |
 | Rust | `src/main.rs`, `build.rs` | 153 lines | edition 2021, deps `wry` 0.56 + `tao` 0.36, `winres` 0.1 as a Windows-only build dep |
-| Kotlin | `MainActivity.kt` | 321 lines | one file, one class, zero Java sources in the repo |
+| Kotlin | `MainActivity.kt` | 326 lines | one file, one class, zero Java sources in the repo |
 | Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 47 lines | no `dependencies {}` block anywhere |
 | XML | manifest + 7 resource files | 59 lines | manifest, 2 themes, strings, colors, 1 vector drawable, adaptive icon, network security config |
 | Python | `tools/make_icon.py` | 120 lines | stdlib only (`math`, `os`, `struct`, `zlib`), pure-python 4x supersampled rasterizer |

@@ -25,9 +25,10 @@ trigger, so it never had this class of bug) and the exe stays at 0.1.3.
   platform was doing this.
 - The dead options menu is now reachable: an ImageButton (platform
   android.R.drawable.ic_menu_more on a 60% white scrim, 8dp margin, top-end)
-  opens a PopupMenu with the same two items through a shared handleMenuItem. The
+  opens a PopupMenu with the same items through a shared handleMenuItem. The
   button is GONE while fullscreen. No new dependency; the APK still ships zero
-  third-party libraries.
+  third-party libraries. Items: Refresh (webView.reload()), Server URL...,
+  Fullscreen / Exit fullscreen.
 - tools/shim_test.js: extracts the shim string from MainActivity.kt and runs it
   against a DOM stub in Node, 21 assertions covering page-driven request/exit,
   the host push, both idempotency guards, the reload heal and the no-bounce
