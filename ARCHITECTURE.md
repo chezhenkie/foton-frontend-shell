@@ -23,7 +23,7 @@ Shared responsibilities, identical on all three targets:
 | --- | --- | --- | --- | --- | --- |
 | Windows x64 | Rust 2021 | `src/main.rs` (137 lines) + `build.rs` (16) | tao Win32 window + wry WebView2 | cargo, winres build script | `foton-frontend-shell.exe` |
 | Linux x64 | Rust 2021 | same sources as Windows | tao GTK window + wry WebKitGTK 4.1 | cargo | `foton-frontend-shell` |
-| Android | Kotlin | `android/app/src/main/java/com/foton/frontend/MainActivity.kt` (262 lines) | platform `Activity` + platform `WebView` (Chromium) | Gradle + AGP | `app-debug.apk` |
+| Android | Kotlin | `android/app/src/main/java/com/foton/frontend/MainActivity.kt` (326 lines) | platform `Activity` + platform `WebView` (Chromium) | Gradle + AGP | `app-debug.apk` |
 
 One Rust binary covers Windows and Linux; the split is compile-time, through
 `cfg`, not runtime. The Android app is a separate codebase by necessity: it is
@@ -274,7 +274,7 @@ android/                    the Kotlin app, a separate Gradle project
 | Triggers | push to main/master, PR, dispatch | push touching `android/**` or the workflow, dispatch |
 | Cache | `actions/cache@v6` keyed on `hashFiles('Cargo.lock')` | `setup-java` gradle cache |
 | Artifact | `foton-frontend-shell-{windows,linux}-x64` | `app-debug-apk` |
-| Signing | none (CI-built, unsigned) | debug key from AGP, sideload-installable |
+| Signing | none (CI-built, unsigned) | one pinned dev key from a secret, so APKs update in place; fingerprint gated in CI |
 
 `cache-cleanup.yml` runs weekly (Mon 03:00 UTC) and on dispatch: it drops
 branch caches older than 7 days and keeps only the newest cache per key prefix

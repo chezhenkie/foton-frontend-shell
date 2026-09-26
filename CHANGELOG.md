@@ -2,9 +2,10 @@
 
 ## Android 0.1.1 (2026-09-25)
 
-Fullscreen state fixed, menu made reachable. versionCode 2, versionName 0.1.1.
-Desktop unaffected: the Rust shim is untouched (it has no host-side fullscreen
-trigger, so it never had this class of bug) and the exe stays at 0.1.3.
+Fullscreen state fixed, menu made reachable, one pinned signing key. versionCode
+3, versionName 0.1.1. Desktop unaffected: the Rust shim is untouched (it has no
+host-side fullscreen trigger, so it never had this class of bug) and the exe
+stays at 0.1.3.
 
 - One owner for fullscreen. `fullscreen` is mutated only by `setFullscreen`,
   called from the page bridge, the overflow menu and the back gesture. Before,
@@ -29,10 +30,21 @@ trigger, so it never had this class of bug) and the exe stays at 0.1.3.
   button is GONE while fullscreen. No new dependency; the APK still ships zero
   third-party libraries. Items: Refresh (webView.reload()), Server URL...,
   Fullscreen / Exit fullscreen.
+- One pinned dev signing key, so APKs update the installed app in place. Before,
+  AGP generated a debug key per machine and every CI runner had its own, so each
+  APK carried a different certificate (measured: three consecutive builds, three
+  signer SHA-256 values) and Android rejected every update - one uninstall per
+  build, which also wiped the saved server URL. The keystore now lives in the
+  secrets FOTON_KEYSTORE_B64 + FOTON_KEYSTORE_PASSWORD, the local copy is
+  gitignored, and a new CI step runs apksigner verify --print-certs and fails the
+  job if the certificate is not the pinned
+  12:C1:8E:FA:44:4E:4F:A0:53:4A:63:11:EF:52:8C:43:5D:05:06:38:1C:DB:42:81:A6:C0:44:17:B3:84:97:82.
+  Builds without the secrets still work and fall back to a throwaway key.
 - tools/shim_test.js: extracts the shim string from MainActivity.kt and runs it
   against a DOM stub in Node, 21 assertions covering page-driven request/exit,
   the host push, both idempotency guards, the reload heal and the no-bounce
   rule. It cannot drift from the source because it reads the source.
+
 ## 2026-09-25 (docs)
 
 Docs only, no shell change, no version bump. New ARCHITECTURE.md covers the

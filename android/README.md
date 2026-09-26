@@ -185,6 +185,8 @@ Local disk stays clean: the APK builds entirely on GitHub Actions.
 
 - Push anything under `android/` or the workflow file -> `.github/workflows/android.yml` runs `:app:assembleDebug`.
 - Artifact: Actions > run > Artifacts > `app-debug-apk/app-debug.apk` (debug-signed, sideload-installable).
+- A `Verify signer` step runs `apksigner verify --print-certs` and fails the job if the
+  certificate is not the pinned one, so a silently rotated key cannot ship.
 
 Toolchain (as pinned): AGP 9.4.0, Gradle 9.6.0 (wrapper committed, sha256 pinned), JDK 17 (Temurin), compileSdk/targetSdk 36, minSdk 26, built-in Kotlin (AGP 9, no kotlin plugin block needed).
 
@@ -193,7 +195,7 @@ Toolchain (as pinned): AGP 9.4.0, Gradle 9.6.0 (wrapper committed, sha256 pinned
 | AGP | 9.4.0, `apply false` at root, applied in `:app` | `build.gradle.kts` |
 | Gradle | 9.6.0, `distributionSha256Sum` pinned | `gradle/wrapper/gradle-wrapper.properties` |
 | namespace / applicationId | `com.foton.frontend` | `app/build.gradle.kts` |
-| version | versionCode 2, versionName 0.1.1 | `app/build.gradle.kts` |
+| version | versionCode 3, versionName 0.1.1 | `app/build.gradle.kts` |
 | SDK | compileSdk 36, targetSdk 36, minSdk 26 | `app/build.gradle.kts` |
 | Java | source/target 17 | `compileOptions` |
 | release buildType | `isMinifyEnabled = false` | `app/build.gradle.kts` |
@@ -216,6 +218,38 @@ Overflow button, top-right of the WebView: refresh the page, change the server
 URL, toggle fullscreen. A URL is validated before it is saved, and a saved URL
 that fails to load (typo, unreachable host) is dropped automatically with a
 fresh prompt - a wrong URL can never stick.
+
+## Signing (one pinned dev key, so updates install in place)
+
+Android refuses an update whose signer differs from the installed app. With the
+stock AGP debug key that is every build: the key is generated per machine, CI
+runners are throwaway, so each APK was signed with a new key and every install
+needed an uninstall first (which also wiped the saved server URL).
+
+CI now signs with one pinned key, so `adb install -r` (or opening the new APK
+on the phone) updates the app in place and the stored URL survives.
+
+| Piece | Where |
+| --- | --- |
+| Keystore + password | GitHub secrets `FOTON_KEYSTORE_B64`, `FOTON_KEYSTORE_PASSWORD` |
+| Local backup (gitignored) | `android/keystore/foton-dev.keystore` + `keystore.properties` |
+| Gradle | `app/build.gradle.kts` decodes the secret and signs the debug build type |
+| Fingerprint gate | `Verify signer` step in `android.yml` |
+| Alias | `foton-dev` |
+
+Certificate SHA-256 (public, in git, checked by CI):
+
+```
+12:C1:8E:FA:44:4E:4F:A0:53:4A:63:11:EF:52:8C:43:5D:05:06:38:1C:DB:42:81:A6:C0:44:17:B3:84:97:82
+```
+
+The key never enters git. Losing both the local backup and the secret means the
+app can never be updated in place again: every future build needs one more
+uninstall. This is a development key, not a release key: it signs nothing but
+this debug APK and is not trusted by any store.
+
+Without the two secrets set, `assembleDebug` still works locally and falls back
+to the auto-generated debug key, whose APK will *not* update a CI-installed one.
 
 ## Server config on the bridge
 
@@ -251,6 +285,7 @@ android/
   gradle/wrapper/            (jar + properties, sha256-pinned 9.6.0)
   gradlew, gradlew.bat
   dist/app-debug.apk         (pulled artifact, gitignored)
+  keystore/                  (local dev key backup + password, gitignored)
   app/build.gradle.kts       the only module; namespace, SDK levels, no deps
   app/src/main/AndroidManifest.xml     (INTERNET only, allowBackup=false, back = goBack)
   app/src/main/java/com/foton/frontend/MainActivity.kt   the whole app
@@ -292,8 +327,8 @@ overflow button) is on-device and not covered by it.
   added, the platform path lights up for free.
 - The overflow button overlays the page's top-right corner. If the web UI puts
   something interactive there, the button has to move.
-- Release signing does not exist: CI runs `assembleDebug`, so the APK carries
-  the AGP debug key and is sideload-only.
+- Release signing does not exist: CI runs `assembleDebug` with the pinned dev key
+  described above. It is sideload-only and must never sign anything real.
 - Cleartext is permitted globally (see above).
 
 ## See also

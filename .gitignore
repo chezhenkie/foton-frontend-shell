@@ -10,3 +10,4 @@ android/build/
 android/app/build/
 android/.kotlin/
 android/dist/
+android/keystore/

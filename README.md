@@ -24,7 +24,9 @@ Desktop: `cargo build --release`. Linux needs `libwebkit2gtk-4.1-dev`,
 windows-latest MSVC and ubuntu-24.04 on push; artifacts
 `foton-frontend-shell-windows-x64` and `foton-frontend-shell-linux-x64`.
 Android: workflow `android-build` (paths `android/**`) -> `app-debug.apk`
-artifact. Android toolchain is AGP 9.4.0, Gradle 9.6.0 (wrapper committed,
+artifact, signed with one pinned dev key from a secret, so a new APK updates the
+installed app in place instead of needing an uninstall. Android toolchain is
+AGP 9.4.0, Gradle 9.6.0 (wrapper committed,
 sha256 pinned), JDK 17 (Temurin), compileSdk/targetSdk 36, minSdk 26, with
 AGP's built-in Kotlin - there is no `dependencies {}` block and no kotlin
 plugin block, so the APK ships zero libraries.
