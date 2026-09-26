@@ -40,6 +40,8 @@ stays at 0.1.3.
   job if the certificate is not the pinned
   12:C1:8E:FA:44:4E:4F:A0:53:4A:63:11:EF:52:8C:43:5D:05:06:38:1C:DB:42:81:A6:C0:44:17:B3:84:97:82.
   Builds without the secrets still work and fall back to a throwaway key.
+  Full procedure, secrets location and rotation runbook:
+  ANDROID-SIGNING-AND-UPDATES.md.
 - tools/shim_test.js: extracts the shim string from MainActivity.kt and runs it
   against a DOM stub in Node, 21 assertions covering page-driven request/exit,
   the host push, both idempotency guards, the reload heal and the no-bounce

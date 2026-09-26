@@ -16,6 +16,8 @@ Three targets, two languages:
 
 Full design, per-platform internals and the language inventory:
 [ARCHITECTURE.md](ARCHITECTURE.md). Android detail: [android/README.md](android/README.md).
+How a new APK updates the installed app instead of needing a reinstall:
+[ANDROID-SIGNING-AND-UPDATES.md](ANDROID-SIGNING-AND-UPDATES.md).
 
 ## Build
 

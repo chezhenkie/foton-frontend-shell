@@ -221,6 +221,9 @@ fresh prompt - a wrong URL can never stick.
 
 ## Signing (one pinned dev key, so updates install in place)
 
+Full detail, including where the secrets live and the rotation runbook, is in
+[`../ANDROID-SIGNING-AND-UPDATES.md`](../ANDROID-SIGNING-AND-UPDATES.md).
+
 Android refuses an update whose signer differs from the installed app. With the
 stock AGP debug key that is every build: the key is generated per machine, CI
 runners are throwaway, so each APK was signed with a new key and every install
@@ -334,6 +337,7 @@ overflow button) is on-device and not covered by it.
 ## See also
 
 `../ARCHITECTURE.md` for the cross-platform design and the desktop side,
-`../CHANGELOG.md` for history. The original plan and the operator manual live
-outside this repo: foton-frontend-shell-android-plan.md and
-foton-frontend-shell-android-manual.md.
+`../ANDROID-SIGNING-AND-UPDATES.md` for the pinned key, the secrets and the
+update procedure, `../CHANGELOG.md` for history. The original plan and the
+operator manual live outside this repo: foton-frontend-shell-android-plan.md
+and foton-frontend-shell-android-manual.md.
