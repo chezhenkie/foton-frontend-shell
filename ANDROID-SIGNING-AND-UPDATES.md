@@ -12,7 +12,7 @@ CI signs every build with one pinned development key. Because the certificate is
 | Certificate DN | `CN=Foton Dev, OU=Shell, O=Foton, C=NL` |
 | Certificate SHA-256 | `12:C1:8E:FA:44:4E:4F:A0:53:4A:63:11:EF:52:8C:43:5D:05:06:38:1C:DB:42:81:A6:C0:44:17:B3:84:97:82` |
 | Valid | 2026-09-26 until 2054-02-11 (10000 days) |
-| Package | `com.foton.frontend`, minSdk 26, versionCode 5, versionName 0.1.1 |
+| Package | `com.foton.frontend`, minSdk 26, versionCode 6, versionName 0.1.1 |
 | Secrets | `FOTON_KEYSTORE_B64`, `FOTON_KEYSTORE_PASSWORD` |
 | Local key backup | `android/keystore/foton-dev.keystore` + `keystore.properties` (gitignored) |
 | Encrypted local copy | `archive/secrets foton frontend shell.zip`, AES-256, sha256 alongside (gitignored) |

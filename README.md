@@ -50,10 +50,9 @@ budget) before creating its webview and shows an offline page with the URL it
 was given; a load that starts but stays unfinished past 10 s marks the window
 title "still waiting for <origin>". On Android a saved URL that fails to load
 is dropped and re-prompted, so a wrong URL can never stick. The
-phone needs Tailscale running to reach the bridge. The overflow gear
+phone needs Tailscale running to reach the bridge. The overflow button
 top-right changes the URL or toggles fullscreen; it disappears while fullscreen,
-and the back gesture leaves fullscreen first. Held in portrait, the gear and
-its menu turn 90 degrees clockwise with the page.
+and the back gesture leaves fullscreen first.
 
 ## Fullscreen
 
