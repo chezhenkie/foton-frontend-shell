@@ -7,7 +7,7 @@ description = "Frontend container process: native window + webview for the foton
 
 [dependencies]
 wry = "0.56"
-tao = "0.36"
+tao = "0.37"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
