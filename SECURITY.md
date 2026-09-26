@@ -73,6 +73,25 @@ and residual risk: `android/README.md`, section "Cleartext".
 - APK signer checked in CI against a pinned SHA-256, matched additionally
   against the keystore secret via `keytool` (android.yml).
 
+## Dependency alert policy
+
+glib (transitive, via webkit2gtk) carries a medium alert: an unsound
+`Iterator` impl in `glib::VariantStrIter`, fixed in glib 0.20.0. Dismissed as
+tolerable risk on 2026-09-26, because:
+
+- it cannot be fixed in this tree right now: wry 0.57.0 pins
+  `webkit2gtk == 2.0.2` exactly and every `webkit2gtk` 2.0.x release requires
+  `glib ^0.18` (crates.io dependency graph, verified 2026-09-26), and Dependabot's
+  own wry/tao bump PRs do not raise the glib entry either;
+- the shell never calls a glib API directly (it is not in `Cargo.toml`), and the
+  unsound iterator is reached only where the gtk bindings iterate a
+  `GVariant` string array;
+- it only ships in the Linux exe.
+
+Re-review trigger: the first time `webkit2gtk` publishes any version requiring
+`glib >= 0.20` (or wry changes the pin), the alert should be reopened by bumping
+and re-running the suite.
+
 ## Secrets
 
 `android/keystore/` (the dev signing key and its password file, gitignored) and

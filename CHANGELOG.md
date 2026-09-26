@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-26 (glib alert disposition)
+
+The Dependabot medium alert on `glib` (`VariantStrIter` unsoundness, fixed in
+0.20.0) is dismissed as tolerable risk. The bump is not available anywhere in
+this tree: wry 0.57.0 pins `webkit2gtk ==2.0.2`, webkit2gtk 2.0.x requires
+`glib ^0.18`, and Dependabot's wry/tao bump PRs do not change that. Verified
+against the crates.io dependency API, not guessed. Reasoning in SECURITY.md
+("Dependency alert policy"); reopen the alert when webkit2gtk moves past
+glib 0.18.
+
 ## 2026-09-26 (audit fixes 11-20)
 
 The remaining ten items from `foton-frontend-audit-report.md` chapter 7. The
