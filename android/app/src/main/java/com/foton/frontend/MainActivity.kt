@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -37,8 +38,18 @@ class MainActivity : Activity() {
     // setFullscreen, so the page and the system bars can never disagree.
     private var fullscreen = false
 
+    // Origin the operator configured, and whether the native bridge is currently
+    // injected. Both are per-load state, never per-app.
+    private var trustedOrigin: String? = null
+    private var bridgeAttached = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The shell talks to operator-chosen servers over a tailnet and hands
+        // them a native bridge, so an adb-attached DevTools session would be
+        // arbitrary code execution on the device. Off unconditionally, even in
+        // debug builds, because debuggable is injected by AGP.
+        WebView.setWebContentsDebuggingEnabled(false)
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         webView = WebView(this)
         setupWebView()
@@ -53,7 +64,7 @@ class MainActivity : Activity() {
         val margin = (OVERFLOW_MARGIN_DP * resources.displayMetrics.density).toInt()
         overflow = ImageButton(this)
         overflow.setImageResource(android.R.drawable.ic_menu_more)
-        overflow.contentDescription = "foton menu"
+        overflow.contentDescription = getString(R.string.menu_content_description)
         overflow.setBackgroundColor(OVERFLOW_SCRIM)
         root.addView(
             overflow,
@@ -78,7 +89,7 @@ class MainActivity : Activity() {
         if (saved.isNullOrBlank()) {
             promptForUrl(null)
         } else {
-            webView.loadUrl(saved)
+            loadTrusted(saved)
         }
     }
 
@@ -102,13 +113,14 @@ class MainActivity : Activity() {
         settings.allowFileAccess = false
         settings.allowContentAccess = false
         webView.webChromeClient = WebChromeClient()
-        webView.addJavascriptInterface(object {
-            @JavascriptInterface
-            fun fullscreen(on: Boolean) {
-                runOnUiThread { setFullscreen(on) }
-            }
-        }, "fotonHost")
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                // Anything the operator did not configure loses the bridge as
+                // soon as it starts loading. Arbitrary servers stay reachable;
+                // what they do not get is a native call channel.
+                if (originOf(url.orEmpty()) == trustedOrigin) attachBridge() else detachBridge()
+            }
+
             override fun onPageFinished(view: WebView, url: String?) {
                 injectFullscreenShim(view)
             }
@@ -120,11 +132,59 @@ class MainActivity : Activity() {
                     WebViewClient.ERROR_TIMEOUT, WebViewClient.ERROR_BAD_URL,
                     WebViewClient.ERROR_UNSUPPORTED_SCHEME -> {
                         prefs.edit().remove(KEY_URL).apply()
+                        trustedOrigin = null
+                        detachBridge()
                         promptForUrl(null)
                     }
                 }
             }
         }
+    }
+
+    // The only native call the page gets. addJavascriptInterface injects into
+    // every frame of the page, so an iframe of another origin can also reach it
+    // while the bridge is attached; the action it can perform is a fullscreen
+    // toggle and nothing else.
+    private val bridge = object {
+        @JavascriptInterface
+        fun fullscreen(on: Boolean) {
+            runOnUiThread { setFullscreen(on) }
+        }
+    }
+
+    // addJavascriptInterface only reaches pages loaded after the call, so the
+    // bridge goes in before loadUrl and comes out on the first foreign page.
+    private fun loadTrusted(url: String) {
+        trustedOrigin = originOf(url)
+        attachBridge()
+        webView.loadUrl(url)
+    }
+
+    private fun attachBridge() {
+        if (trustedOrigin != null && !bridgeAttached) {
+            webView.addJavascriptInterface(bridge, BRIDGE_NAME)
+            bridgeAttached = true
+        }
+    }
+
+    private fun detachBridge() {
+        if (bridgeAttached) {
+            webView.removeJavascriptInterface(BRIDGE_NAME)
+            bridgeAttached = false
+        }
+    }
+
+    // scheme://host[:port] with the default port dropped, lowercased, no path.
+    // Null for anything that is not an http(s) URL with a host.
+    private fun originOf(url: String): String? {
+        if (url.isEmpty()) return null
+        val uri = try { Uri.parse(url) } catch (e: Exception) { return null }
+        val scheme = uri.scheme?.lowercase() ?: return null
+        val host = uri.host?.lowercase() ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        val port = try { uri.port } catch (e: NumberFormatException) { return null }
+        val standard = if (scheme == "https") 443 else 80
+        return if (port <= 0 || port == standard) "$scheme://$host" else "$scheme://$host:$port"
     }
 
     private fun injectFullscreenShim(view: WebView) {
@@ -225,19 +285,19 @@ class MainActivity : Activity() {
         val input = EditText(this)
         input.setText(current.orEmpty())
         AlertDialog.Builder(this)
-            .setTitle("Server URL")
+            .setTitle(R.string.dialog_server_url)
             .setView(input)
-            .setPositiveButton("Open") { _, _ ->
+            .setPositiveButton(R.string.dialog_open) { _, _ ->
                 val url = normalizeUrl(input.text.toString())
                 if (url == null) {
-                    Toast.makeText(this, "invalid URL", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.error_invalid_url, Toast.LENGTH_SHORT).show()
                     promptForUrl(input.text.toString())
                 } else {
                     prefs.edit().putString(KEY_URL, url).apply()
-                    webView.loadUrl(url)
+                    loadTrusted(url)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.dialog_cancel, null)
             .show()
     }
 
@@ -264,9 +324,14 @@ class MainActivity : Activity() {
     }
 
     private fun addMenuItems(menu: Menu) {
-        menu.add(Menu.NONE, MENU_REFRESH, Menu.NONE, "Refresh")
-        menu.add(Menu.NONE, MENU_URL, Menu.NONE, "Server URL...")
-        menu.add(Menu.NONE, MENU_FULLSCREEN, Menu.NONE, if (fullscreen) "Exit fullscreen" else "Fullscreen")
+        menu.add(Menu.NONE, MENU_REFRESH, Menu.NONE, R.string.menu_refresh)
+        menu.add(Menu.NONE, MENU_URL, Menu.NONE, R.string.menu_server_url)
+        menu.add(
+            Menu.NONE,
+            MENU_FULLSCREEN,
+            Menu.NONE,
+            if (fullscreen) R.string.menu_exit_fullscreen else R.string.menu_fullscreen
+        )
     }
 
     private fun showOverflowMenu() {
@@ -315,6 +380,7 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS_NAME = "foton_prefs"
         private const val KEY_URL = "server_url"
+        private const val BRIDGE_NAME = "fotonHost"
         private const val MENU_REFRESH = 3
         private const val MENU_URL = 1
         private const val MENU_FULLSCREEN = 2

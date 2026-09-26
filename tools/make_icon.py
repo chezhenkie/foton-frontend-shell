@@ -130,7 +130,21 @@ def ico(entries):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    assets = os.path.join(here, os.pardir, "assets")
+    root = os.path.abspath(os.path.join(here, os.pardir))
+    assets = os.path.join(root, "assets")
+
+    # src/main.rs decodes icon.rgba with a const ICON_SIZE and asserts the byte
+    # count at compile time. Regenerating at a different size here would fail the
+    # next build, so refuse instead of writing a file the crate cannot use.
+    with open(os.path.join(root, "src", "main.rs"), "r", encoding="utf-8") as f:
+        rust = f.read()
+    if "const ICON_SIZE" not in rust:
+        raise SystemExit("src/main.rs has no ICON_SIZE const; add it before generating")
+    rust_size = int(rust.split("const ICON_SIZE: u32 = ")[1].split(";")[0].strip())
+    if rust_size != WINDOW_SIZE:
+        raise SystemExit(
+            "size mismatch: tools/make_icon.py WINDOW_SIZE=%d, src/main.rs ICON_SIZE=%d"
+            % (WINDOW_SIZE, rust_size))
 
     entries = [(s, png(s, raster(s))) for s in ICO_SIZES]
     with open(os.path.join(assets, "icon.ico"), "wb") as f:
@@ -142,7 +156,7 @@ def main():
 
     print("icon.ico sizes:", ICO_SIZES)
     print("icon.png: 256x256")
-    print("icon.rgba:", WINDOW_SIZE, "x", WINDOW_SIZE)
+    print("icon.rgba:", WINDOW_SIZE, "x", WINDOW_SIZE, "(matches ICON_SIZE)")
 
 
 if __name__ == "__main__":

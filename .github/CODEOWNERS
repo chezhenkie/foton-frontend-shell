@@ -1,0 +1,15 @@
+# Default for anything not named explicitly below.
+*                       @chezhenkie
+
+# CI and supply-chain gates
+/.github/               @chezhenkie
+
+# The two platform shells
+/android/               @chezhenkie
+/src/                   @chezhenkie
+Cargo.toml              @chezhenkie
+Cargo.lock              @chezhenkie
+build.rs                @chezhenkie
+
+# Icon generation and tests
+/tools/                 @chezhenkie

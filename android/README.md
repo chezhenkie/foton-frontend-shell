@@ -9,16 +9,19 @@ Firebase, no analytics) - consistent with the foton zero-Google rule.
 
 | Language | Where | Size |
 | --- | --- | --- |
-| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 326 lines, one file, one class |
-| Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 47 lines, no `dependencies {}` block anywhere |
-| XML | `AndroidManifest.xml` + 7 resource files | 59 lines |
+| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 392 lines, one file, one class |
+| Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 80 lines, no `dependencies {}` block anywhere |
+| XML | `AndroidManifest.xml` + 7 resource files | 87 lines |
 
 There is no Java source in the repo, no layout XML (the view tree is built in
 code), no `res/menu` (menu items are added programmatically), and no raster
 drawables (the launcher icon is a vector plus an adaptive icon). The Kotlin
 compiler comes from AGP 9's built-in Kotlin, so there is no kotlin plugin block
-and no kotlin-stdlib dependency line either: `assembleDebug` produces an APK
-whose only code is `MainActivity` plus the platform's own classes.
+and no kotlin-stdlib dependency line either. The stdlib still ships inside the
+APK because AGP contributes it itself: measured on `android/dist/app-debug.apk`,
+1107 of 2164 dex type descriptors are `kotlin.*`, and 16 are
+`com.foton.frontend`. The app's own code is `MainActivity`; the rest is the
+JetBrains runtime and the platform's own classes.
 
 ## App architecture
 
@@ -68,16 +71,38 @@ overflow button sits inside the safe area.
 ### JavaScript bridge (page -> host)
 
 ```kotlin
-webView.addJavascriptInterface(object {
+private val bridge = object {
     @JavascriptInterface
     fun fullscreen(on: Boolean) { runOnUiThread { setFullscreen(on) } }
-}, "fotonHost")
+}
 ```
 
-One method, one channel name, mirrored on the desktop side by wry's
-`window.ipc`. `@JavascriptInterface` is what makes it reachable from JS on
-API 17+; the `runOnUiThread` hop is mandatory because `addJavascriptInterface`
-calls arrive on a private WebView thread, not the UI thread.
+One method, one channel name (`fotonHost`), mirrored on the desktop side by
+wry's `window.ipc`. `@JavascriptInterface` is what makes it reachable from JS on
+API 17+; the `runOnUiThread` hop is mandatory because
+`addJavascriptInterface` calls arrive on a private WebView thread, not the UI
+thread.
+
+Per-origin least privilege (audit S2): the bridge is injected only pages on the
+origin the operator configured, and removed from anything else.
+
+- `loadTrusted(url)` sets `trustedOrigin = originOf(url)` and calls
+  `addJavascriptInterface` before `loadUrl`, because the interface only reaches
+  pages loaded after the call.
+- `onPageStarted` compares the incoming main-frame origin against
+  `trustedOrigin` and detaches the bridge for anything else. Navigating from a
+  trusted page to a link, a redirect or an error page on another origin drops
+  the channel.
+- `onReceivedError` on the main frame also clears `trustedOrigin`, so the
+  stale URL cannot keep the bridge alive while the dialog is up.
+- `originOf` lowercases scheme and host, drops the default port, and returns
+  null for non-http(s) or host-less URLs; `null` never compares equal to an
+  origin, so a parse failure means "no bridge".
+
+Known limitation, same as the desktop webkit2gtk side: the injected interface
+exists in every frame of the page while attached, so an iframe of another origin
+can call it too. The one call it has is the fullscreen toggle. Tightening that
+needs a per-frame origin check Android's WebView API does not offer.
 
 ### Fullscreen state: one owner, two directions
 
@@ -185,8 +210,17 @@ Local disk stays clean: the APK builds entirely on GitHub Actions.
 
 - Push anything under `android/` or the workflow file -> `.github/workflows/android.yml` runs `:app:assembleDebug`.
 - Artifact: Actions > run > Artifacts > `app-debug-apk/app-debug.apk` (debug-signed, sideload-installable).
-- A `Verify signer` step runs `apksigner verify --print-certs` and fails the job if the
-  certificate is not the pinned one, so a silently rotated key cannot ship.
+- A `Verify signer, applicationId and version` step then checks, in order:
+  1. the APK verifies with `apksigner verify` at all (the step sets
+     `pipefail`, so a failed verify is not swallowed by `tee`),
+  2. the certificate SHA-256 read back from the keystore secret with `keytool`
+     is the same one the APK was signed with - this catches gradle silently
+     falling back to the auto-generated debug key when the secrets are missing,
+  3. that fingerprint is the pinned one below - rotated or substituted keys
+     are caught in CI instead of on devices,
+  4. `aapt2 dump badging` matches the `applicationId`, `versionCode` and
+     `versionName` in `app/build.gradle.kts`, so a stale APK cannot be uploaded
+     as if it were the current tree.
 
 Toolchain (as pinned): AGP 9.4.0, Gradle 9.6.0 (wrapper committed, sha256 pinned), JDK 17 (Temurin), compileSdk/targetSdk 36, minSdk 26, built-in Kotlin (AGP 9, no kotlin plugin block needed).
 
@@ -203,7 +237,8 @@ Toolchain (as pinned): AGP 9.4.0, Gradle 9.6.0 (wrapper committed, sha256 pinned
 | flags | `-Xmx2g`, `useAndroidX=true`, `nonTransitiveRClass=true` | `gradle.properties` |
 
 `useAndroidX` is an opt-in switch for tooling, not a dependency pull: with no
-`dependencies {}` block the APK still contains no third-party code. The CI job
+`dependencies {}` block the only third-party code in the APK is the
+kotlin-stdlib that AGP 9's built-in Kotlin contributes. The CI job
 gets its SDK from `android-actions/setup-android@v4`, and `local.properties` is
 gitignored, so no machine path is committed.
 
@@ -237,7 +272,7 @@ on the phone) updates the app in place and the stored URL survives.
 | Keystore + password | GitHub secrets `FOTON_KEYSTORE_B64`, `FOTON_KEYSTORE_PASSWORD` |
 | Local backup (gitignored) | `android/keystore/foton-dev.keystore` + `keystore.properties` |
 | Gradle | `app/build.gradle.kts` decodes the secret and signs the debug build type |
-| Fingerprint gate | `Verify signer` step in `android.yml` |
+| Fingerprint gate | `Verify signer, applicationId and version` step in `android.yml` (keystore read back with keytool, cross-checked against the APK, then against the pin below) |
 | Alias | `foton-dev` |
 
 Certificate SHA-256 (public, in git, checked by CI):
@@ -258,15 +293,43 @@ to the auto-generated debug key, whose APK will *not* update a CI-installed one.
 
 Dev runs disable 2FA so the phone loads straight in. `mock-bridge/server.js` bakes `const TWOFA_OFF = true;` - a plain `node server.js` start skips all 2FA/session gating and reports 2FA disabled; flip the line to `false` to re-enable for acceptance/sniff runs. All 2FA/TOTP/session machinery stays intact. While 2FA is off, `twofa.js` removes the 2FA UI from the page entirely for remote clients (no gate, no demo pill).
 
-## Cleartext (dev-permissive by design)
+## Cleartext (dev-permissive, decided 2026-09-26)
 
-`res/xml/network_security_config.xml` currently allows cleartext globally because the tailnet host is not fixed yet. Tighten by replacing the base-config with a scoped domain-config once the host + TLS settle:
+`res/xml/network_security_config.xml` allows cleartext globally
+(`<base-config cleartextTrafficPermitted="true" />`). This is a decision, not an
+oversight, and the audit's S3 finding is deliberately accepted rather than
+fixed:
+
+- The shell's whole job is pointing at an operator-chosen server - a laptop, a
+  mini-PC, a NAS - whose address is typed into the dialog at runtime. The tailnet
+  serves `*.ts.net` names from a public CA, but plain LAN addresses and local
+  hostnames have no certificate, so https is not just unavailable there, any
+  scoped `domain-config` with a fixed host would break the moment the shell is
+  aimed somewhere else. A host allow-list in the config would defeat that.
+- The traffic is either already encrypted at another layer (Tailscale/WireGuard
+  between phone and tailnet machines) or within a network the operator already
+  trusts; the shell carries no credentials of its own.
+- Exposure: on an open network without the tailnet, cleartext HTTP on local
+  subnets can be read or spoofed in transit. That is inherent to `http://`
+  targeting and not made worse by the shell.
+
+Rule of thumb kept in this file: an operator who wants TLS points the shell at
+an `https://` origin; the WebView enforces TLS there and allows no downgrade.
+When a fixed, cert-bearing host becomes the norm, the `domain-config` snippet
+below is the tightening step:
 
 ```xml
 <domain-config cleartextTrafficPermitted="true">
   <domain includeSubdomains="false">laptop.tailnet-name.ts.net</domain>
 </domain-config>
 ```
+
+Note re clarifications: `<base-config cleartextTrafficPermitted="true">` is what
+permits cleartext everywhere (system default on modern targetSdk is otherwise
+`false` for user-added CAs and cleartext); platform defaults are what impose the
+restriction; overriding the base-config relaxes it. This is the same effect the
+docs warn about for `usesCleartextTraffic="true"` in the manifest - the shell
+does not use that attribute, see Known gaps.
 
 ## Zero-Google verification
 
@@ -315,8 +378,11 @@ in the APK.
 
 `tools/shim_test.js` pulls the shim string straight out of `MainActivity.kt`
 (so it can never drift from the source) and runs it against a minimal DOM stub
-in Node: 21 assertions covering page-driven request/exit, the host push, the
-idempotency guard, the reload-while-fullscreen heal, and the no-bounce rule.
+in Node, and does the same for the desktop `FULLSCREEN_SCRIPT` in `src/main.rs`
+(in a fresh vm realm, the way the shell injects it): 40 assertions covering
+page-driven request/exit, the host push, the idempotency guard, the
+reload-while-fullscreen heal, the no-bounce rule, prototype patching and the ESC
+branch.
 
 ```
 node tools/shim_test.js
@@ -337,7 +403,11 @@ overflow button) is on-device and not covered by it.
   something interactive there, the button has to move.
 - Release signing does not exist: CI runs `assembleDebug` with the pinned dev key
   described above. It is sideload-only and must never sign anything real.
-- Cleartext is permitted globally (see above).
+- Cleartext is permitted globally: decided, not an oversight, see the Cleartext
+  section above.
+- The fullscreen bridge reaches every frame of the attached page (including
+  iframes of other origins); it exposes one fullscreen toggle, see the bridge
+  section.
 
 ## See also
 

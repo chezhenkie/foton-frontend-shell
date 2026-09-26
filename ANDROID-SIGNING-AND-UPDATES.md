@@ -15,6 +15,7 @@ CI signs every build with one pinned development key. Because the certificate is
 | Package | `com.foton.frontend`, minSdk 26, versionCode 4, versionName 0.1.1 |
 | Secrets | `FOTON_KEYSTORE_B64`, `FOTON_KEYSTORE_PASSWORD` |
 | Local key backup | `android/keystore/foton-dev.keystore` + `keystore.properties` (gitignored) |
+| Encrypted local copy | `archive/secrets foton frontend shell.zip`, AES-256, sha256 alongside (gitignored) |
 
 This key signs nothing but this debug APK. It is not a release key, it is not trusted by any store, and it must never be reused for anything real.
 
@@ -37,12 +38,13 @@ Three different keys for three builds of the same app, hence three uninstalls. T
 
 ## Where the key lives
 
-Two places, and you need both:
+Three places, and you need the two local ones:
 
 1. GitHub Actions secrets on `chezhenkie/foton-frontend-shell`: Settings > Secrets and variables > Actions. `FOTON_KEYSTORE_B64` is the keystore file as a single base64 line, `FOTON_KEYSTORE_PASSWORD` is the store and key password. Secrets are write-only: the UI never shows the value again, so this copy cannot be recovered from GitHub.
 2. Local, gitignored: `android/keystore/foton-dev.keystore` (2670 bytes) and `android/keystore/keystore.properties` (`storePassword=...`, `alias=foton-dev`). This is the only copy that can restore the secrets. A fresh clone does not have it, so copy it somewhere outside the repo if this machine is not permanent.
+3. Since 2026-09-26 a second local copy, AES-256 encrypted, in `archive/secrets foton frontend shell.zip` (gitignored, see `archive/RESTORE.txt`). This guards against git accidents and stray `clean` runs, **not** against losing the machine: it sits on the same disk as the original. A genuinely off-machine copy (cloud or USB) is still outstanding.
 
-Both the keystore and its password are excluded from git by the `android/keystore/` line in `.gitignore`. Verify with `git status --short` (nothing under `android/keystore/` should ever appear) and `git log --all -- android/keystore` (should be empty).
+The keystore and its password are excluded from git by the `android/keystore/`, `archive/` and `password for zip secrets foton frontend shell - leesmij.txt` lines in `.gitignore`. Verify with `git status --short` (nothing under `android/keystore/`, `archive/` or that password file should ever appear) and `git log --all -- android/keystore` (should be empty).
 
 ## How a build gets signed
 
@@ -59,17 +61,27 @@ That last line is the fallback: a local `./gradlew :app:assembleDebug` with no s
 
 ## The fingerprint gate
 
-The `Verify signer` step runs after the build and before the artifact upload:
+The `Verify signer, applicationId and version` step runs after the build and
+before the artifact upload. It checks four things, each in its own `if`:
 
-```bash
-expected="12:C1:8E:FA:44:4E:4F:A0:53:4A:63:11:EF:52:8C:43:5D:05:06:38:1C:DB:42:81:A6:C0:44:17:B3:84:97:82"
-want=$(echo "$expected" | tr -d ':' | tr 'A-F' 'a-f')
-apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | head -1)
-"$apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | tee "$RUNNER_TEMP/signer.txt"
-grep -qiF "$want" "$RUNNER_TEMP/signer.txt" || { echo "::error::unexpected signing key, devices will need a reinstall"; exit 1; }
-```
+1. `apksigner verify --print-certs` - the APK's signature is valid at all. The
+   step sets `pipefail` first, so a failed verify cannot be hidden by the `tee`.
+2. The keystore secret is decoded and read back with `keytool -list -v`; its
+   `SHA256` must equal the certificate the APK carries. This is the check that
+   catches the fallback: if the secrets are missing, gradle signs with the
+   per-machine debug key and this comparison is what turns red (with an explicit
+   "secrets missing" error before that).
+3. The fingerprint must equal the pinned one below. This is the check that
+   never changes: a key rotated for correctness (rotation runbook below) must
+   be re-pinned here, and anything else is a loud failure.
+4. `aapt2 dump badging` - the APK's `applicationId`, `versionCode` and
+   `versionName` must equal what `app/build.gradle.kts` says, so a stale APK
+   cannot be uploaded as if it were the current tree.
 
-`apksigner --print-certs` prints the digest lowercase and unseparated, hence the `tr`. If the certificate is ever anything else the job fails and no artifact is uploaded, so a key that silently changed can never reach a phone. The expected value lives in the workflow file, which is public: a fingerprint is not a secret.
+`apksigner --print-certs` prints the digest lowercase and unseparated, keytool
+prints it colon-separated in CAPS, hence the (`s/[: ]//g`, `tr 'A-F' 'a-f'`)
+normalisation on both sides. The expected value lives in the workflow file,
+which is public: a fingerprint is not a secret.
 
 ## Installing an update on the phone
 
@@ -88,7 +100,7 @@ Two rules Android enforces on top of the signature match:
 
 ## Verifying an APK before you install it
 
-In CI, `Verify signer` already did it and the job would have been red. Locally, with no Android SDK installed, `apksigner` is not available, so either read it off the CI log of the run that produced the artifact:
+In CI, the verify step already did it and the job would have been red. Locally, with no Android SDK installed, `apksigner` is not available, so either read it off the CI log of the run that produced the artifact:
 
 ```bash
 gh run view <run-id> --log | Select-String "SHA-256 digest"
@@ -116,7 +128,7 @@ keytool -genkeypair -keystore android/keystore/foton-dev.keystore \
 ```
 
 2. Read the new fingerprint: `keytool -list -v ... | grep SHA256:`.
-3. Update the `expected=` line in the `Verify signer` step of `.github/workflows/android.yml` to the new fingerprint, and the table at the top of this file.
+3. Update the `want=` fingerprint in the `Verify signer, applicationId and version` step of `.github/workflows/android.yml` (and the certificate line in `android/README.md`). The step cross-checks the APK certificate against the keystore secret with keytool, and against this pinned fingerprint, so both must move together.
 4. Re-upload both secrets. `gh secret set` reads the value from stdin, which keeps a 3.5 KB base64 line off the command line:
 
 ```powershell
@@ -128,7 +140,7 @@ Start-Process -FilePath "C:\Program Files\GitHub CLI\gh.exe" `
 ```
 
 Do the same for `FOTON_KEYSTORE_PASSWORD`, then delete the temporary `keystore.b64`. Never commit it, and do not use `Set-Content -NoNewline` for that file; use `[System.IO.File]::WriteAllText` as above.
-5. Push the fingerprint change. The next run either passes `Verify signer` (new key in place) or fails loudly, which is the point.
+5. Push the fingerprint change. The next run either passes the verify step (new key in place) or fails loudly, which is the point.
 6. On the phone: uninstall once, install the new APK, done.
 
 The old secret values cannot be read back from GitHub, so step 1 is the only moment the new key exists outside your machine. If you skip step 4 the next build fails at configuration time with the "must be set together" error rather than shipping an unsigned APK.
@@ -141,7 +153,7 @@ If you built with `./gradlew :app:assembleDebug` and no secrets, the APK carries
 
 | Path | Role |
 | --- | --- |
-| `.github/workflows/android.yml` | passes the secrets, runs `Verify signer`, uploads the artifact |
+| `.github/workflows/android.yml` | passes the secrets, runs the signer/applicationId/version verify step, uploads the artifact |
 | `android/app/build.gradle.kts` | decodes the secret, `signingConfigs.pinned`, debug build type |
 | `.gitignore` | `android/keystore/` keeps the key and password out of git |
 | `android/README.md` | the app itself: menu, fullscreen, install steps, known gaps |

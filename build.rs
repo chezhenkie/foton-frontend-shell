@@ -7,7 +7,7 @@ fn main() {
         res.set("ProductName", "foton-frontend-shell");
         res.set("FileDescription", "foton frontend shell");
         res.set("CompanyName", "foton");
-        res.set("LegalCopyright", "MIT");
+        res.set("LegalCopyright", "Copyright (c) 2026 Foton Apps");
         res.set("OriginalFilename", "foton-frontend-shell.exe");
         res.set("ProductVersion", VERSION);
         res.set("FileVersion", VERSION);

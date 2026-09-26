@@ -1,5 +1,100 @@
 # Changelog
 
+## 2026-09-26 (audit fixes 11-20)
+
+The remaining ten items from `foton-frontend-audit-report.md` chapter 7. The
+first genuinely behavioural change of the audit: the native bridge is now
+per-origin on both platforms, and an unreachable server is reported instead of
+spinning.
+
+- **Per-origin page-to-host bridge (S2, desktop + Android).** Only the origin
+  the operator configured gets the fullscreen channel now. Desktop:
+  `with_ipc_handler` compares the request's scheme + authority against
+  `origin_of(&url)` and ignores anything else, fail-closed when the URL is not
+  parseable. Android: `loadTrusted` sets `trustedOrigin` and injects
+  `fotonHost` before `loadUrl`; `onPageStarted` detaches it for every other
+  main-frame origin; main-frame load errors clear it too. Arbitrary servers
+  stay fully reachable - they just stop carrying a native call channel. Same
+  documented limitation on both: while the bridge is attached, any frame of the
+  page can call it (webkit2gtk attributes every message to the main frame).
+- **Unreachable server has a face (Q1, desktop).** wry's page-load handler has
+  no failure event, so dead servers used to spin silently. `probe()` now spends
+  up to 2 s on a TCP connect before the webview is built and shows a static
+  offline page (with the intended URL and the three ways to re-point the shell)
+  when nothing answers; a load still running after 10 s changes the window title
+  to "still waiting for <origin>" until it finishes. The loop stays on
+  `ControlFlow::Wait`/`WaitUntil`, so an idle shell never burns CPU.
+- **Icon cannot drift silently (Q2).** `icon.rgba` is decoded with an
+  `ICON_SIZE` const and a compile-time length assert, and `tools/make_icon.py`
+  now reads `src/main.rs` and refuses to regenerate a size Rust disagrees with.
+  Previously a bad icon file would have produced a window with no icon.
+- **Both fullscreen shims are tested (Q3/Q6 of the plan).** `tools/shim_test.js`
+  extracts and exercises the desktop `FULLSCREEN_SCRIPT` too (fresh vm realm,
+  19 new assertions: prototype patching, ESC routing, promise returns, idempotent
+  injection) - 40 assertions total, all green.
+- **`cargo build --release --locked` in CI (S9).** The lock file is committed;
+  CI must not resolve different versions. This exposed a real drift:
+  `Cargo.lock` still said `0.1.3` after the version bump to `0.1.4`, which would
+  have failed the build; fixed first, so the gate works.
+- **All workflows have a concurrency group and a job `timeout-minutes` (P2/P3).**
+  PR runs are superseded by a newer push and cancelled; main/dispatch runs are
+  not interrupted mid-build. Timeouts: desktop 30 min, Android 45, cache
+  cleanup 15.
+- **`network_security_config.xml` stays globally cleartext, now as a documented
+  decision (S3).** The shell's job is an operator-chosen server; a host
+  allow-list in the config would break re-pointing it, and on-tailnet traffic is
+  already WireGuard-wrapped. Rationale and residual open-network risk are in
+  `android/README.md` ("Cleartext").
+- **`SECURITY.md` + `.github/CODEOWNERS` added (C9).** The policy states the
+  privilege model in one table, names the reporting channel, and records the
+  every-frame bridge limitation as a known limitation instead of pretending it
+  is closed.
+- **Android UI strings moved to `res/values/strings.xml` (Q6).** Dialog title and
+  buttons, toast, the three menu items and the overflow content descriptor are
+  resources now; no behaviour change.
+- **APK verification is four checks, not one (S10).** The Android verify step
+  gained `pipefail` (a failed `apksigner verify` used to be swallowed by
+  `tee` - a tampered APK would have passed that step), a `keytool` read-back of
+  the keystore secret cross-checked against the APK's certificate (catches the
+  fallback-debug-key case), the pinned fingerprint check retained (verified
+  against the committed keystore with `keytool` - it matches), and an
+  `aapt2 dump badging` comparison of applicationId / versionCode / versionName
+  against `app/build.gradle.kts`, so a stale APK cannot be uploaded.
+
+## 2026-09-26 (audit fixes 1-10)
+
+Ten items from `foton-frontend-audit-report.md` chapter 7, cheapest first.
+No behaviour change on either app beyond the WebView debugging switch.
+
+- Android WebView remote debugging is now off unconditionally:
+  `WebView.setWebContentsDebuggingEnabled(false)` at the top of `onCreate`.
+  AGP injects `android:debuggable="true"` into debug builds, which turned
+  WebView debugging on for every APK this project has ever shipped, so any adb
+  attach got arbitrary JS plus the `fotonHost` bridge.
+- Signing key: a second copy, AES-256 encrypted, at
+  `archive/secrets foton frontend shell.zip` with a sha256 sidecar and
+  `archive/RESTORE.txt`. Round-trip verified byte-identical. A genuinely
+  off-machine copy is still open.
+- MIT `LICENSE` added, and `build.rs` `LegalCopyright` now carries a real
+  copyright line instead of the word "MIT".
+- The "zero third-party code" claim is corrected everywhere: there is no
+  `dependencies {}` block, and the only third-party code in the APK is the
+  JetBrains kotlin-stdlib that AGP 9 contributes by itself. The zero-Google
+  claim was always true and is unchanged.
+- Stale line counts refreshed (Kotlin 332, Gradle DSL 83, XML 81, Python 149,
+  YAML 190) and the `dist/` paragraph corrected: artifacts are downloaded CI
+  uploads in per-target folders, there is no `shell.pid` and no shipped
+  fixed-version WebView2 runtime.
+- Dependabot now also watches `cargo`, so the 263 crates in `Cargo.lock` are
+  covered.
+- `build.yml` gained the same `paths:` filter `android.yml` already had, so
+  docs-only commits stop paying for a two-leg LTO release build.
+- All eight third-party Action references are SHA-pinned, with the tag as a
+  trailing comment. Dependabot bumps them.
+- `permissions: contents: read` on `build.yml` and `android.yml`.
+- `android.yml` push is scoped to `branches: [main]`, so the keystore secrets
+  are not handed to a branch build.
+
 ## 2026-09-26 (new app icon)
 
 New icon on every target, from one SVG: `foton-app-icon.svg` in the repo root,
@@ -43,8 +138,9 @@ stays at 0.1.3.
 - The dead options menu is now reachable: an ImageButton (platform
   android.R.drawable.ic_menu_more on a 60% white scrim, 8dp margin, top-end)
   opens a PopupMenu with the same items through a shared handleMenuItem. The
-  button is GONE while fullscreen. No new dependency; the APK still ships zero
-  third-party libraries. Items: Refresh (webView.reload()), Server URL...,
+  button is GONE while fullscreen. No new dependency; the APK still pulls in no
+  third-party library beyond the kotlin-stdlib AGP 9 contributes. Items:
+  Refresh (webView.reload()), Server URL...,
   Fullscreen / Exit fullscreen.
 - One pinned dev signing key, so APKs update the installed app in place. Before,
   AGP generated a debug key per machine and every CI runner had its own, so each
@@ -83,7 +179,8 @@ First Android front (separate codebase from the Rust shell: a platform
 WebView host, not a Rust binary). One android.app.Activity + WebView pointed at
 the mock bridge behind Tailscale, with zero Google/AndroidX runtime
 dependencies - no Play Services, no Firebase, no analytics, and no Gradle
-dependencies block at all, so the APK ships no third-party code.
+dependencies block at all, so the only third-party code in the APK is the
+kotlin-stdlib that AGP 9's built-in Kotlin contributes itself.
 
 - URL: prompted on first launch into SharedPreferences foton_prefs/server_url,
   normalized and validated before saving (bare hosts get http:// prepended,

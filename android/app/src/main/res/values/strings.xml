@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">foton</string>
+    <string name="menu_content_description">foton menu</string>
+    <string name="dialog_server_url">Server URL</string>
+    <string name="dialog_open">Open</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="error_invalid_url">invalid URL</string>
+    <string name="menu_refresh">Refresh</string>
+    <string name="menu_server_url">Server URL...</string>
+    <string name="menu_fullscreen">Fullscreen</string>
+    <string name="menu_exit_fullscreen">Exit fullscreen</string>
 </resources>

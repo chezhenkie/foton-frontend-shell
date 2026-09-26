@@ -2,6 +2,7 @@ name: android-build
 
 on:
   push:
+    branches: [main]
     paths:
       - "android/*.kts"
       - "android/*.properties"
@@ -15,19 +16,29 @@ on:
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
+    # First run downloads the Gradle distribution and the Android build tools;
+    # 45 min covers that plus assembleDebug.
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
-      - uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
 
       - name: Build debug APK
         working-directory: android
@@ -38,16 +49,73 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleDebug --no-daemon
 
-      - name: Verify signer
+      - name: Verify signer, applicationId and version
         working-directory: android
+        shell: bash
+        env:
+          FOTON_KEYSTORE_B64: ${{ secrets.FOTON_KEYSTORE_B64 }}
+          FOTON_KEYSTORE_PASSWORD: ${{ secrets.FOTON_KEYSTORE_PASSWORD }}
         run: |
-          expected="12:C1:8E:FA:44:4E:4F:A0:53:4A:63:11:EF:52:8C:43:5D:05:06:38:1C:DB:42:81:A6:C0:44:17:B3:84:97:82"
-          want=$(echo "$expected" | tr -d ':' | tr 'A-F' 'a-f')
-          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | head -1)
-          "$apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | tee "$RUNNER_TEMP/signer.txt"
-          grep -qiF "$want" "$RUNNER_TEMP/signer.txt" || { echo "::error::unexpected signing key, devices will need a reinstall"; exit 1; }
+          set -o pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          [ -f "$apk" ] || { echo "::error::no APK at $apk"; exit 1; }
+          if [ -z "$FOTON_KEYSTORE_B64" ] || [ -z "$FOTON_KEYSTORE_PASSWORD" ]; then
+            echo "::error::keystore secrets missing, so the APK was signed with an ephemeral debug key and cannot be checked"
+            exit 1
+          fi
 
-      - uses: actions/upload-artifact@v7
+          # Newest build-tools first: a wrong-version apksigner is a confusing failure.
+          newest() { ls -1 "$ANDROID_HOME"/build-tools/*/"$1" 2>/dev/null | sort -V | tail -1; }
+          apksigner=$(newest apksigner)
+          aapt=$(newest aapt2)
+          if [ -z "$apksigner" ] || [ -z "$aapt" ]; then
+            echo "::error::build-tools incomplete (apksigner=$apksigner aapt2=$aapt)"
+            exit 1
+          fi
+
+          # pipefail matters here: without it a failed verify is hidden by tee.
+          "$apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/signer.txt"
+          apk_fpr=$(grep -m1 -i 'certificate SHA-256 digest' "$RUNNER_TEMP/signer.txt" \
+            | sed 's/.*digest: //; s/ //g' | tr 'A-F' 'a-f')
+
+          # The key gradle was handed, read back independently with keytool.
+          # keytool prints colons and apksigner does not, so normalise both.
+          printf '%s' "$FOTON_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/foton-dev.keystore"
+          key_fpr=$(keytool -list -v -keystore "$RUNNER_TEMP/foton-dev.keystore" \
+            -alias foton-dev -storepass "$FOTON_KEYSTORE_PASSWORD" \
+            | grep -m1 'SHA256:' | sed 's/.*SHA256: //; s/[: ]//g' | tr 'A-F' 'a-f')
+
+          if [ -z "$apk_fpr" ] || [ -z "$key_fpr" ]; then
+            echo "::error::no SHA-256 fingerprint read (apk='$apk_fpr' keystore='$key_fpr')"
+            exit 1
+          fi
+          if [ "$apk_fpr" != "$key_fpr" ]; then
+            echo "::error::APK signed with $apk_fpr but the keystore holds $key_fpr"
+            exit 1
+          fi
+          # Pinned so a rotated or substituted key is caught here and not on devices.
+          want="12:C1:8E:FA:44:4E:4F:A0:53:4A:63:11:EF:52:8C:43:5D:05:06:38:1C:DB:42:81:A6:C0:44:17:B3:84:97:82"
+          want=$(printf '%s' "$want" | tr -d ':\n' | tr 'A-F' 'a-f')
+          if [ "$apk_fpr" != "$want" ]; then
+            echo "::error::unexpected signing key $apk_fpr, devices will need a reinstall"
+            exit 1
+          fi
+
+          # The APK on disk must be the one this tree describes, not a stale build.
+          badging=$("$aapt" dump badging "$apk")
+          apk_id=$(printf '%s\n' "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          apk_code=$(printf '%s\n' "$badging" | sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p")
+          apk_name=$(printf '%s\n' "$badging" | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p")
+          want_id=$(sed -n 's/.*applicationId = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
+          want_code=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts)
+          want_name=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
+          if [ "$apk_id" != "$want_id" ] || [ "$apk_code" != "$want_code" ] || [ "$apk_name" != "$want_name" ]; then
+            echo "::error::APK is $apk_id $apk_code/$apk_name, tree says $want_id $want_code/$want_name"
+            exit 1
+          fi
+          echo "ok: $apk_id $apk_code/$apk_name signed with $apk_fpr"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: app-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
