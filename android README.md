@@ -9,9 +9,9 @@ Firebase, no analytics) - consistent with the foton zero-Google rule.
 
 | Language | Where | Size |
 | --- | --- | --- |
-| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 392 lines, one file, one class |
+| Kotlin | `app/src/main/java/com/foton/frontend/MainActivity.kt` | 547 lines, one file, one class |
 | Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 80 lines, no `dependencies {}` block anywhere |
-| XML | `AndroidManifest.xml` + 7 resource files | 87 lines |
+| XML | `AndroidManifest.xml` + 9 resource files | 107 lines |
 
 There is no Java source in the repo, no layout XML (the view tree is built in
 code), no `res/menu` (menu items are added programmatically), and no raster
@@ -33,16 +33,46 @@ Built in `onCreate`, no layout resource:
 Activity (com.foton.frontend.MainActivity, FotonTheme)
   FrameLayout (root, setContentView)
     WebView (MATCH_PARENT x MATCH_PARENT)
-    ImageButton (overflow, TOP|END, 8dp margin, GONE while fullscreen)
+    FrameLayout (overlayBox, TOP|END, 8dp margin)
+      ImageButton (overflow gear, GONE while fullscreen)
 ```
 
-The overflow button is the only chrome the shell draws: the platform glyph
-`android.R.drawable.ic_menu_more` on a 60% white scrim, so it stays readable
-over a light and a dark page. It opens a `PopupMenu` carrying the three items -
-Refresh, Server URL..., Fullscreen - which are the same items the (framework)
-options menu would carry, and it is the reason they are reachable at all - see
-Known gaps history. It is hidden while fullscreen, so immersive really is
-immersive.
+The overflow button is the only chrome the shell draws: a purple gear
+(`res/drawable/ic_menu_gear.xml`, 24dp, no background plate - only the theme
+ripple marks a touch), so it reads on a light and a dark page without a scrim.
+It opens a `PopupWindow` carrying the three items - Refresh, Server URL...,
+Fullscreen - which are the same items the (framework) options menu would carry,
+and it is the reason they are reachable at all - see Known gaps history. It is
+hidden while fullscreen, so immersive really is immersive. The panel is a
+focusable window of its own, so `onBackPressed` closes it first: back never
+leaves fullscreen or the page while the menu is open.
+
+### Overlay rotation (portrait only)
+
+On a phone held in portrait the web app renders itself 90 degrees clockwise to
+fake landscape (`body.p-rot`), so the native overlay turns with it: the gear and
+the menu panel are 90 degrees clockwise in portrait, upright in landscape. That
+is the whole of it.
+
+The rotation is deliberately fenced in:
+
+- `overlayTurnsClockwise()` + `applyOverlayRotation()` are the only place the
+  decision is made; `applyOverlayRotation()` runs once in `onCreate` and from
+  `onConfigurationChanged` (the manifest already absorbs the orientation change,
+  so the activity is never recreated).
+- Exactly two views are ever transformed: `overflow.rotation` and
+  `panel.rotation`. The root, the overlay box, the popup's host and the WebView
+  are never given a transform, so nothing can travel into the page.
+- The menu panel is the only child of its own popup window. The window is given
+  the panel's post-turn footprint (width and height swapped) and the panel is
+  pushed half the difference, which puts its centre on the window centre - so
+  the drawn panel fills the window exactly and never spills out of it.
+- The panel is anchored on `overlayBox`, which never turns, so no
+  inverse-transform arithmetic is needed to place it.
+- Nothing else in the shell rotates: the URL prompt stays a plain upright
+  `AlertDialog`, the fullscreen shim and the bridge are untouched.
+- A panel that is open when the device turns is dismissed: its numbers were
+  measured for the old orientation.
 
 | Item | id | Action |
 | --- | --- | --- |
@@ -229,7 +259,7 @@ Toolchain (as pinned): AGP 9.4.0, Gradle 9.6.0 (wrapper committed, sha256 pinned
 | AGP | 9.4.0, `apply false` at root, applied in `:app` | `build.gradle.kts` |
 | Gradle | 9.6.0, `distributionSha256Sum` pinned | `gradle/wrapper/gradle-wrapper.properties` |
 | namespace / applicationId | `com.foton.frontend` | `app/build.gradle.kts` |
-| version | versionCode 4, versionName 0.1.1 | `app/build.gradle.kts` |
+| version | versionCode 5, versionName 0.1.1 | `app/build.gradle.kts` |
 | SDK | compileSdk 36, targetSdk 36, minSdk 26 | `app/build.gradle.kts` |
 | Java | source/target 17 | `compileOptions` |
 | release buildType | `isMinifyEnabled = false` | `app/build.gradle.kts` |
@@ -249,10 +279,11 @@ gitignored, so no machine path is committed.
 3. First launch prompts for the server URL. Three equivalent forms: `http://<tailscale-ip>:8765/`, `http://<host>.<tailnet>.ts.net:8765/` (full MagicDNS), or `http://<host>:8765/` (short MagicDNS).
 4. Phone must run the Tailscale app so it can reach the bridge.
 
-Overflow button, top-right of the WebView: refresh the page, change the server
+Overflow gear, top-right of the WebView: refresh the page, change the server
 URL, toggle fullscreen. A URL is validated before it is saved, and a saved URL
 that fails to load (typo, unreachable host) is dropped automatically with a
-fresh prompt - a wrong URL can never stick.
+fresh prompt - a wrong URL can never stick. Held in portrait, the gear and the
+menu turn 90 degrees clockwise with the page.
 
 ## Signing (one pinned dev key, so updates install in place)
 
@@ -389,18 +420,22 @@ node tools/shim_test.js
 ```
 
 No device needed. Visual and OS-level behaviour (bars, gesture nav, the
-overflow button) is on-device and not covered by it.
+overflow gear and its rotation) is on-device and not covered by it.
 
 ## Known gaps
 
 - The framework options menu is still dead code. `onCreateOptionsMenu` /
   `onOptionsItemSelected` exist and are correct, but both themes are
   `NoActionBar` and there is no Toolbar (no AppCompat or Material on the
-  classpath), so the platform never shows it. The overflow button covers the
+  classpath), so the platform never shows it. The overflow gear covers the
   same three items through the shared `handleMenuItem`; if an action bar is ever
   added, the platform path lights up for free.
-- The overflow button overlays the page's top-right corner. If the web UI puts
+- The overflow gear overlays the page's top-right corner. If the web UI puts
   something interactive there, the button has to move.
+- The overlay rotation follows the device orientation, not the page: a served
+  page that does not turn itself (anything but the foton web app) will show the
+  gear and its menu turned in portrait. The page decides when it turns, the
+  shell only mirrors the orientation.
 - Release signing does not exist: CI runs `assembleDebug` with the pinned dev key
   described above. It is sideload-only and must never sign anything real.
 - Cleartext is permitted globally: decided, not an oversight, see the Cleartext

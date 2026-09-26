@@ -23,7 +23,7 @@ Shared responsibilities, identical on all three targets:
 | --- | --- | --- | --- | --- | --- |
 | Windows x64 | Rust 2021 | `src/main.rs` (419 lines) + `build.rs` (16) | tao Win32 window + wry WebView2 | cargo, winres build script | `foton-frontend-shell.exe` |
 | Linux x64 | Rust 2021 | same sources as Windows | tao GTK window + wry WebKitGTK 4.1 | cargo | `foton-frontend-shell` |
-| Android | Kotlin | `android/app/src/main/java/com/foton/frontend/MainActivity.kt` (392 lines) | platform `Activity` + platform `WebView` (Chromium) | Gradle + AGP | `app-debug.apk` |
+| Android | Kotlin | `android/app/src/main/java/com/foton/frontend/MainActivity.kt` (547 lines) | platform `Activity` + platform `WebView` (Chromium) | Gradle + AGP | `app-debug.apk` |
 
 One Rust binary covers Windows and Linux; the split is compile-time, through
 `cfg`, not runtime. The Android app is a separate codebase by necessity: it is
@@ -35,9 +35,9 @@ JavaScript shim, not the code.
 | Language | Where | Size | Notes |
 | --- | --- | --- | --- |
 | Rust | `src/main.rs`, `build.rs` | 435 lines | edition 2021, deps `wry` 0.56 + `tao` 0.36, `winres` 0.1 as a Windows-only build dep; `#[cfg(test)]` unit tests included |
-| Kotlin | `MainActivity.kt` | 392 lines | one file, one class, zero Java sources in the repo |
+| Kotlin | `MainActivity.kt` | 547 lines | one file, one class, zero Java sources in the repo |
 | Gradle Kotlin DSL | `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts` | 80 lines | no `dependencies {}` block anywhere |
-| XML | manifest + 7 resource files | 87 lines | manifest, 2 themes (`values` + `values-v29`), strings, 2 launcher icon layers, adaptive icon, network security config |
+| XML | manifest + 9 resource files | 107 lines | manifest, 2 themes (`values` + `values-v29`), strings, 2 launcher icon layers, adaptive icon, the overflow gear, the menu row ripple, network security config |
 | Python | `tools/make_icon.py` | 163 lines | stdlib only (`math`, `os`, `struct`, `zlib`), pure-python 4x supersampled rasterizer |
 | JavaScript | `tools/shim_test.js` | 211 lines | Node test harness for both shim strings (Android + desktop), not shipped in any app |
 
@@ -214,8 +214,18 @@ Two design details worth keeping:
 Full detail in `android README.md`. Shape of it:
 
 - one `android.app.Activity` subclass, built entirely in code: a `FrameLayout`
-  root holding a full-size `WebView` and one `ImageButton` overflow button, no
+  root holding a full-size `WebView` and, as a sibling, one `FrameLayout`
+  overlay box whose only child is the `ImageButton` overflow gear, no
   layout XML
+- the overflow overlay mirrors the page's portrait rotation: in portrait the web
+  app turns itself 90 degrees clockwise, so the gear and its menu panel turn
+  with it. Fenced in on purpose - two views are transformed (`overflow`,
+  `panel`), the panel lives in its own popup window, the root/box/host/WebView
+  never get a transform, and the URL prompt stays an upright `AlertDialog`.
+  `applyOverlayRotation()` is the single decision point, re-run from
+  `onConfigurationChanged`; an open panel is dismissed rather than re-placed
+- `res/` is 9 small files; the launcher icon is a vector drawable plus an
+  adaptive icon, no raster assets.
 - no AndroidX, no AppCompat, no Material, no Play Services, no Firebase, no
   analytics: `app/build.gradle.kts` has no `dependencies {}` block at all, so
   the only third-party code in the APK is the JetBrains kotlin-stdlib that AGP
@@ -238,8 +248,6 @@ Full detail in `android README.md`. Shape of it:
   `window.__fotonSetFullscreen`, so neither side can be wrong about the other.
 - URL persistence is `SharedPreferences` (`foton_prefs` / `server_url`) with
   validation on save and self-healing on load failure.
-- `res/` is 7 small files; the launcher icon is a vector drawable plus an
-  adaptive icon, no raster assets.
 - Only permission is `android.permission.INTERNET`; `allowBackup=false`.
 - `WebView.setWebContentsDebuggingEnabled(false)` in `onCreate`, unconditionally.
   The platform default follows `android:debuggable`, and AGP injects that into

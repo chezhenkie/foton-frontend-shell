@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,14 +25,27 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
-import android.widget.PopupMenu
+import android.widget.LinearLayout
+import android.widget.PopupWindow
+import android.widget.TextView
 import android.widget.Toast
 
 class MainActivity : Activity() {
 
     private lateinit var webView: WebView
     private lateinit var overflow: ImageButton
+
+    // The overflow overlay is one self-contained box in the top-end corner: the
+    // gear button is its only child and the only thing in it that ever turns.
+    // The WebView is a sibling of the box, never a child, so nothing that
+    // rotates here can reach the page.
+    private lateinit var overlayBox: FrameLayout
+    private lateinit var root: FrameLayout
     private lateinit var prefs: SharedPreferences
+
+    // Open menu panel, if any. Held so an orientation change can drop it: its
+    // geometry is measured once, at show time.
+    private var menuPanel: PopupWindow? = null
 
     // Single source of truth for fullscreen. Written by the page bridge, the
     // overflow menu and the back gesture - all of them go through
@@ -53,7 +67,7 @@ class MainActivity : Activity() {
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         webView = WebView(this)
         setupWebView()
-        val root = FrameLayout(this)
+        root = FrameLayout(this)
         root.addView(
             webView,
             FrameLayout.LayoutParams(
@@ -62,12 +76,23 @@ class MainActivity : Activity() {
             )
         )
         val margin = (OVERFLOW_MARGIN_DP * resources.displayMetrics.density).toInt()
+        val pad = dp(OVERFLOW_PAD_DP)
         overflow = ImageButton(this)
-        overflow.setImageResource(android.R.drawable.ic_menu_more)
+        overflow.setImageResource(R.drawable.ic_menu_gear)
         overflow.contentDescription = getString(R.string.menu_content_description)
-        overflow.setBackgroundColor(OVERFLOW_SCRIM)
-        root.addView(
+        // No background box: the gear stands on the page on its own, only the
+        // theme ripple (a borderless oval, not a plate) marks a touch.
+        overflow.setPadding(pad, pad, pad, pad)
+        overlayBox = FrameLayout(this)
+        overlayBox.addView(
             overflow,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        root.addView(
+            overlayBox,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -85,6 +110,7 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         applyBarAppearance()
+        applyOverlayRotation()
         val saved = prefs.getString(KEY_URL, null)
         if (saved.isNullOrBlank()) {
             promptForUrl(null)
@@ -323,6 +349,30 @@ class MainActivity : Activity() {
         return handleMenuItem(item.itemId) || super.onOptionsItemSelected(item)
     }
 
+    // Portrait is the one case where the page itself is rendered 90 degrees
+    // clockwise to fake landscape (the web app's body.p-rot). This is the
+    // native half of that: the gear and the menu panel turn with the page so
+    // the overlay reads the same way up as the content under it.
+    private fun overlayTurnsClockwise(): Boolean =
+        resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+
+    // Single place where the overlay rotation is decided and applied. The
+    // transform lands on the gear button and, while it is open, on the menu
+    // panel only. No container, no window, no page view is ever rotated.
+    private fun applyOverlayRotation() {
+        if (!this::overflow.isInitialized) return
+        val turned = overlayTurnsClockwise()
+        overflow.rotation = if (turned) OVERLAY_TURN else 0f
+        // A shown panel was measured for the old orientation, so it goes away
+        // rather than being re-placed with stale numbers.
+        dismissMenuPanel()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyOverlayRotation()
+    }
+
     private fun addMenuItems(menu: Menu) {
         menu.add(Menu.NONE, MENU_REFRESH, Menu.NONE, R.string.menu_refresh)
         menu.add(Menu.NONE, MENU_URL, Menu.NONE, R.string.menu_server_url)
@@ -334,11 +384,104 @@ class MainActivity : Activity() {
         )
     }
 
+    // The same three items in the same order as the options menu, built as one
+    // panel. The panel is the only view that turns, and it lives in its own
+    // popup window, so the rotation cannot travel into the activity.
     private fun showOverflowMenu() {
-        val popup = PopupMenu(this, overflow)
-        addMenuItems(popup.menu)
-        popup.setOnMenuItemClickListener { item -> handleMenuItem(item.itemId) }
-        popup.show()
+        val items = arrayOf(
+            getString(R.string.menu_refresh) to MENU_REFRESH,
+            getString(R.string.menu_server_url) to MENU_URL,
+            getString(
+                if (fullscreen) R.string.menu_exit_fullscreen else R.string.menu_fullscreen
+            ) to MENU_FULLSCREEN
+        )
+        val rowWidth = dp(MENU_ROW_MIN_WIDTH_DP)
+        val rowPad = dp(MENU_ROW_PAD_DP)
+        val textColor = getColor(android.R.attr.textColorPrimary)
+        val panel = LinearLayout(this)
+        panel.orientation = LinearLayout.VERTICAL
+        panel.background = menuPanelBackground()
+        panel.setPadding(rowPad / 2, rowPad / 2, rowPad / 2, rowPad / 2)
+        for ((label, id) in items) {
+            val row = TextView(this)
+            row.text = label
+            row.setTextColor(textColor)
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.isSingleLine = true
+            row.ellipsize = android.text.TextUtils.TruncateAt.END
+            row.minimumWidth = rowWidth
+            row.setPadding(rowPad, 0, rowPad, 0)
+            // One instance per row: a shared Drawable keeps a single callback,
+            // so only the last row would ripple.
+            row.background = getDrawable(R.drawable.menu_row)
+            row.setOnClickListener {
+                dismissMenuPanel()
+                handleMenuItem(id)
+            }
+            panel.addView(row, LinearLayout.LayoutParams(rowWidth, dp(MENU_ROW_HEIGHT_DP)))
+        }
+        panel.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val naturalWidth = panel.measuredWidth
+        val naturalHeight = panel.measuredHeight
+
+        // A turn never changes the box a view was measured into, so the window
+        // is given the panel's post-turn footprint and the panel is pushed half
+        // the difference: its centre lands exactly on the window centre, which
+        // makes the drawn panel fill the window and nothing spill out of it.
+        val turned = overlayTurnsClockwise()
+        val windowWidth = if (turned) naturalHeight else naturalWidth
+        val windowHeight = if (turned) naturalWidth else naturalHeight
+        panel.pivotXMode = View.PIVOT_X_EXPLICIT
+        panel.pivotYMode = View.PIVOT_Y_EXPLICIT
+        panel.pivotX = naturalWidth / 2f
+        panel.pivotY = naturalHeight / 2f
+        panel.rotation = if (turned) OVERLAY_TURN else 0f
+        panel.translationX = (windowWidth - naturalWidth) / 2f
+        panel.translationY = (windowHeight - naturalHeight) / 2f
+        val host = FrameLayout(this)
+        // The panel is laid out at its own size inside the smaller post-turn
+        // window box, so the host must not clip what the turn pushes out.
+        host.clipChildren = false
+        host.addView(
+            panel,
+            FrameLayout.LayoutParams(naturalWidth, naturalHeight, Gravity.TOP or Gravity.START)
+        )
+        val popup = PopupWindow(windowWidth, windowHeight, false)
+        popup.isFocusable = true
+        popup.isOutsideTouchable = true
+        popup.elevation = dp(MENU_PANEL_ELEVATION_DP).toFloat()
+        popup.contentView = host
+        popup.setOnDismissListener { menuPanel = null }
+        menuPanel = popup
+
+        // Anchored on the box, not on the gear: the box never turns, so its
+        // position needs no inverse-transform arithmetic.
+        val anchor = IntArray(2)
+        overlayBox.getLocationInWindow(anchor)
+        val metrics = resources.displayMetrics
+        val left = (anchor[0] + overlayBox.width / 2f).toInt()
+            .coerceAtMost((metrics.widthPixels - root.paddingRight - windowWidth).coerceAtLeast(0))
+        val top = (anchor[1] + overlayBox.height).toInt()
+            .coerceAtMost((metrics.heightPixels - root.paddingBottom - windowHeight).coerceAtLeast(0))
+        popup.showAtLocation(root, Gravity.NO_GRAVITY, left, top)
+    }
+
+    private fun dismissMenuPanel() {
+        val open = menuPanel ?: return
+        menuPanel = null
+        if (open.isShowing) open.dismiss()
+    }
+
+    private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun menuPanelBackground(): GradientDrawable = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(MENU_PANEL_RADIUS_DP).toFloat()
+        setColor(getColor(android.R.attr.colorBackgroundFloating))
+        setStroke(dp(MENU_PANEL_STROKE_DP), getColor(android.R.attr.colorOutline))
     }
 
     private fun handleMenuItem(id: Int): Boolean {
@@ -361,6 +504,13 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
+        // The panel is a focusable window of its own, so back has to be closed
+        // explicitly here to keep the old menu behaviour: first back closes the
+        // menu, it never exits fullscreen or the page behind it.
+        if (menuPanel != null) {
+            dismissMenuPanel()
+            return
+        }
         if (fullscreen) {
             setFullscreen(false)
             return
@@ -385,9 +535,13 @@ class MainActivity : Activity() {
         private const val MENU_URL = 1
         private const val MENU_FULLSCREEN = 2
         private const val OVERFLOW_MARGIN_DP = 8
-
-        // Translucent light scrim so the dark platform overflow glyph stays
-        // readable over both a light and a dark page.
-        private val OVERFLOW_SCRIM = 0x99FFFFFF.toInt()
+        private const val OVERFLOW_PAD_DP = 10f
+        private const val OVERLAY_TURN = 90f
+        private const val MENU_ROW_HEIGHT_DP = 48f
+        private const val MENU_ROW_MIN_WIDTH_DP = 200f
+        private const val MENU_ROW_PAD_DP = 16f
+        private const val MENU_PANEL_RADIUS_DP = 10f
+        private const val MENU_PANEL_STROKE_DP = 1f
+        private const val MENU_PANEL_ELEVATION_DP = 8f
     }
 }

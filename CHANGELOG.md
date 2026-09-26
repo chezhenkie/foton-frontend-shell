@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-26 (overflow overlay: portrait turn, purple gear)
+
+The overflow overlay now reads the same way up as the page under it. The page
+turns itself 90 degrees clockwise in portrait to fake landscape (`body.p-rot` in
+the web app), so the native gear and its menu turned sideways next to it.
+
+- **Overlay turns with the page (portrait only).** `overlayTurnsClockwise()` and
+  `applyOverlayRotation()` are the single decision point; the gear and the menu
+  panel get `rotation = 90f` in portrait and `0f` in landscape, re-applied from
+  `onConfigurationChanged` (the manifest already absorbs the change, so the
+  activity is never recreated). An open panel is dismissed on a turn instead of
+  being re-placed with stale numbers.
+- **The turn is fenced in.** Exactly two views are ever transformed:
+  `overflow.rotation` and `panel.rotation`. The gear sits alone in its own
+  `overlayBox` (the WebView is its sibling, never a child), the panel sits alone
+  in its own popup window, and the root, the box, the popup host and the WebView
+  never receive a transform. The URL prompt is still a plain upright
+  `AlertDialog`; the fullscreen shim and the bridge are untouched. The popup
+  window gets the panel's post-turn footprint (width and height swapped) and the
+  panel is pushed half the difference, so its centre lands on the window centre
+  and the drawn panel fills the window exactly. The panel is anchored on the
+  box, which never turns, so no inverse-transform arithmetic is needed.
+- **Purple gear, no background box.** The platform `ic_menu_more` glyph on a
+  60% white scrim is gone. `res/drawable/ic_menu_gear.xml` is a vector gear in
+  `#7C4DFF` (24dp, 8 teeth, centre hole) and the button carries no plate - only
+  the theme ripple marks a touch. The panel is a rounded
+  `colorBackgroundFloating` rect with a `colorOutline` hairline and
+  `colorControlHighlight` row ripples, all resolved from the theme, so it
+  follows light and dark.
+- **`PopupMenu` replaced by `PopupWindow`.** `PopupMenu` gives no access to its
+  content view, and there is no supported way to turn one. Same three items in
+  the same order, same shared `handleMenuItem`, same handlers; the dead
+  framework options menu still works off the same list. The panel is measured
+  once at show time and clamped inside the display and the system bars. Because
+  the panel is a focusable window of its own, `onBackPressed` now closes it
+  first, which is what the old `PopupMenu` did on its own.
+
 ## 2026-09-26 (glib alert disposition)
 
 The Dependabot medium alert on `glib` (`VariantStrIter` unsoundness, fixed in
