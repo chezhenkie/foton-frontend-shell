@@ -359,20 +359,20 @@ android/
   app/src/main/res/values-v29/themes.xml                DayNight theme, no action bar
   app/src/main/res/drawable/ic_launcher_foreground.xml
   app/src/main/res/drawable/ic_launcher_background.xml
-  app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml     (adaptive icon: hatched foreground, green background with a see-thru hole)
+  app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml     (adaptive icon: hatched foreground, solid green background)
   app/src/main/res/xml/network_security_config.xml
 ```
 
 Icon lineage: one SVG drives both targets - `foton-app-icon.svg` in the repo
-root, copied byte-identical to `../assets/favicon.svg`, where the desktop
-rasterizer `tools/make_icon.py` traces it with the constants
-`GREEN = 0xA8, 0xE6, 0xCF` and `DARK = 0x1A, 0x1A, 0x1A`. Here the adaptive
-background drawable (`ic_launcher_background.xml`) is that green with a 60x60
-even-odd hole, so the launcher wallpaper shows through, and the foreground
-vector draws the four hatched blocks as explicit stroke paths in a 512 viewport
-scaled into the 66dp adaptive safe zone - VectorDrawable has no SVG patterns or
-masks, so the 45 and 18 degree hatch segments are precomputed. No rasters ship
-in the APK.
+root, copied byte-identical to `assets/favicon.svg`, where `tools/make_icon.py`
+rasters the desktop icons with the constants
+`GREEN = 0xA8, 0xE6, 0xCF` and `DARK = 0x1A, 0x1A, 0x1A`, and
+`tools/make_android_icon.py` regenerates the launcher vectors here. The
+background drawable (`ic_launcher_background.xml`) is that green, solid, and the
+foreground vector draws the four hatched blocks as explicit stroke paths in a
+512 viewport scaled into the 66dp adaptive safe zone - VectorDrawable has no SVG
+patterns or masks, so the 45 and 18 degree hatch segments are precomputed. No
+rasters ship in the APK.
 
 ## Testing the shim
 

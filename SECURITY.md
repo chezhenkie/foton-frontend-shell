@@ -59,7 +59,7 @@ choice, and pages served that way are cleartext for whatever network sits
 between. `https://` origins are enforced by the webview with no downgrade.
 
 Android allows cleartext globally (its `network_security_config.xml`). Rationale
-and residual risk: `android/README.md`, section "Cleartext".
+and residual risk: `android README.md`, section "Cleartext".
 
 ## Supply chain
 

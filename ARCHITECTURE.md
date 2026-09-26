@@ -211,7 +211,7 @@ Two design details worth keeping:
 
 ## Android architecture (Kotlin)
 
-Full detail in `android/README.md`. Shape of it:
+Full detail in `android README.md`. Shape of it:
 
 - one `android.app.Activity` subclass, built entirely in code: a `FrameLayout`
   root holding a full-size `WebView` and one `ImageButton` overflow button, no
@@ -300,10 +300,10 @@ unchanged on both.
   system bars on Android.
 - **One icon lineage.** `foton-app-icon.svg` (= `assets/favicon.svg`, identical
   bytes) -> `tools/make_icon.py` -> `icon.ico` / `icon.png` / `icon.rgba` for the
-  desktop, and the same geometry mirrored in `res/drawable/ic_launcher_foreground.xml`
+  desktop, and `tools/make_android_icon.py` mirrors the same geometry into
+  `res/drawable/ic_launcher_foreground.xml`
   (hatch as explicit stroke paths) plus `res/drawable/ic_launcher_background.xml`,
-  the `#A8E6CF` layer with an even-odd hole so the launcher wallpaper shows
-  through. The desktop rasterizer constants (`GREEN = 0xA8, 0xE6, 0xCF`,
+  the solid `#A8E6CF` layer. The desktop rasterizer constants (`GREEN = 0xA8, 0xE6, 0xCF`,
   `DARK = 0x1A, 0x1A, 0x1A`) are the same colors the Android vectors use.
 - **One trust rule.** A loopback origin is a trusted client: no token, no 2FA
   prompt. Android deviates only because it must reach a tailnet host, and the

@@ -1,6 +1,6 @@
 # Android signing and updates
 
-How a new `app-debug.apk` reaches the phone as an *update* instead of a reinstall, where the signing key lives, and what to do when it goes wrong. Companion to `android/README.md` (what the app does) and `ARCHITECTURE.md` (how the three targets fit together).
+How a new `app-debug.apk` reaches the phone as an *update* instead of a reinstall, where the signing key lives, and what to do when it goes wrong. Companion to `android README.md` (what the app does) and `ARCHITECTURE.md` (how the three targets fit together).
 
 ## The short version
 
@@ -128,7 +128,7 @@ keytool -genkeypair -keystore android/keystore/foton-dev.keystore \
 ```
 
 2. Read the new fingerprint: `keytool -list -v ... | grep SHA256:`.
-3. Update the `want=` fingerprint in the `Verify signer, applicationId and version` step of `.github/workflows/android.yml` (and the certificate line in `android/README.md`). The step cross-checks the APK certificate against the keystore secret with keytool, and against this pinned fingerprint, so both must move together.
+3. Update the `want=` fingerprint in the `Verify signer, applicationId and version` step of `.github/workflows/android.yml` (and the certificate line in `android README.md`). The step cross-checks the APK certificate against the keystore secret with keytool, and against this pinned fingerprint, so both must move together.
 4. Re-upload both secrets. `gh secret set` reads the value from stdin, which keeps a 3.5 KB base64 line off the command line:
 
 ```powershell
@@ -147,7 +147,7 @@ The old secret values cannot be read back from GitHub, so step 1 is the only mom
 
 ## Runbook: the local fallback produced an APK
 
-If you built with `./gradlew :app:assembleDebug` and no secrets, the APK carries a random key. It cannot update a CI-installed app; installing it means one uninstall. CI is the supported path, which is also why `android/README.md` says local disk stays clean: the APK is built on GitHub Actions, not on a developer machine.
+If you built with `./gradlew :app:assembleDebug` and no secrets, the APK carries a random key. It cannot update a CI-installed app; installing it means one uninstall. CI is the supported path, which is also why `android README.md` says local disk stays clean: the APK is built on GitHub Actions, not on a developer machine.
 
 ## Related files
 
@@ -156,5 +156,5 @@ If you built with `./gradlew :app:assembleDebug` and no secrets, the APK carries
 | `.github/workflows/android.yml` | passes the secrets, runs the signer/applicationId/version verify step, uploads the artifact |
 | `android/app/build.gradle.kts` | decodes the secret, `signingConfigs.pinned`, debug build type |
 | `.gitignore` | `android/keystore/` keeps the key and password out of git |
-| `android/README.md` | the app itself: menu, fullscreen, install steps, known gaps |
+| `android README.md` | the app itself: menu, fullscreen, install steps, known gaps |
 | `CHANGELOG.md` | when the key was pinned, under Android 0.1.1 |

@@ -15,7 +15,7 @@ Three targets, two languages:
 | Android | Kotlin (plain `Activity` + `WebView`, zero AndroidX) | `./gradlew :app:assembleDebug` | `app-debug.apk` |
 
 Full design, per-platform internals and the language inventory:
-[ARCHITECTURE.md](ARCHITECTURE.md). Android detail: [android/README.md](android/README.md).
+[ARCHITECTURE.md](ARCHITECTURE.md). Android detail: [android README.md](android%20README.md).
 How a new APK updates the installed app instead of needing a reinstall:
 [ANDROID-SIGNING-AND-UPDATES.md](ANDROID-SIGNING-AND-UPDATES.md).
 
