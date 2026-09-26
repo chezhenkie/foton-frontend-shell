@@ -16,6 +16,7 @@ require(haveKey == havePass) {
 // Without the secrets a local build falls back to the auto-generated debug key.
 val pinnedKeystore = if (haveKey) {
     layout.buildDirectory.file("foton-dev.keystore").get().asFile.apply {
+        parentFile.mkdirs()
         writeBytes(Base64.getDecoder().decode(keystoreB64!!.trim()))
     }
 } else {
