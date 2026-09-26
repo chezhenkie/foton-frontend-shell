@@ -64,8 +64,10 @@ exercises that same string in Node.
 - `assets/icon.ico` - 7 sizes (16, 24, 32, 48, 64, 128, 256) for the exe.
 - `assets/icon.png` - 256x256, written by the same tool but not consumed by any
   build file; a raster reference for docs and the web frontend.
-- `assets/favicon.svg` - the source geometry the desktop rasterizer traces (the
-  Android vector drawable mirrors it by hand).
+- `assets/favicon.svg` - the icon geometry, a byte-identical copy of
+  `foton-app-icon.svg` in the repo root. `tools/make_icon.py` traces it; the
+  Android vector drawables mirror it with precomputed hatch segments
+  (VectorDrawable has no SVG patterns or masks).
 
 ### Release profile
 
@@ -230,12 +232,13 @@ unchanged on both.
   `document.fullscreenElement` / `fullscreenchange` pair. What "fullscreen"
   physically means is a host decision: borderless window on desktop, immersive
   system bars on Android.
-- **One icon lineage.** `assets/favicon.svg` geometry -> `tools/make_icon.py` ->
-  `icon.ico` / `icon.png` / `icon.rgba` for the desktop, and the same geometry
-  hand-mirrored in `res/drawable/ic_launcher_foreground.xml` plus the
-  `#A8E6CF` adaptive-icon background. The desktop rasterizer constants
-  (`GREEN = 0xA8, 0xE6, 0xCF`, `DARK = 0x1A, 0x1A, 0x1A`) are the same colors
-  the Android vector uses.
+- **One icon lineage.** `foton-app-icon.svg` (= `assets/favicon.svg`, identical
+  bytes) -> `tools/make_icon.py` -> `icon.ico` / `icon.png` / `icon.rgba` for the
+  desktop, and the same geometry mirrored in `res/drawable/ic_launcher_foreground.xml`
+  (hatch as explicit stroke paths) plus `res/drawable/ic_launcher_background.xml`,
+  the `#A8E6CF` layer with an even-odd hole so the launcher wallpaper shows
+  through. The desktop rasterizer constants (`GREEN = 0xA8, 0xE6, 0xCF`,
+  `DARK = 0x1A, 0x1A, 0x1A`) are the same colors the Android vectors use.
 - **One trust rule.** A loopback origin is a trusted client: no token, no 2FA
   prompt. Android deviates only because it must reach a tailnet host, and the
   tailnet is the trust boundary there.

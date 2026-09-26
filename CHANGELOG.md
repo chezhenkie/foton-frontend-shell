@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-26 (new app icon)
+
+New icon on every target, from one SVG: `foton-app-icon.svg` in the repo root,
+copied byte-identical to `assets/favicon.svg`. Mint `#A8E6CF` rounded-square
+background (rx 32) with a 60x60 see-through hole at 402,329, four
+square-cornered blocks hatched in `#1A1A1A` (45 degrees, the wide block 18
+degrees from vertical), marker-weight 6px outlines. Desktop 0.1.4:
+`tools/make_icon.py` rasters the new geometry into `icon.ico` / `icon.png` /
+`icon.rgba` - verified hole and corners transparent, block interiors dark on
+green gaps, ico still 7 sizes (16..256). Android: the adaptive foreground vector
+carries the blocks as explicit stroke paths in a 512 viewport scaled into the
+66dp safe zone (VectorDrawable has no SVG patterns or masks); the new
+`ic_launcher_background.xml` drawable is the green layer with an even-odd hole,
+so the launcher wallpaper shows through. versionCode 4, versionName 0.1.1.
+`colors.xml` dropped: its background color moved into the drawable.
+
 ## Android 0.1.1 (2026-09-25)
 
 Fullscreen state fixed, menu made reachable, one pinned signing key. versionCode

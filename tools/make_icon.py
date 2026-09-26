@@ -1,7 +1,8 @@
-"""Rasterize the foton favicon (assets/favicon.svg geometry) to icon.png / icon.ico / icon.rgba.
+"""Rasterize the foton app icon (assets/favicon.svg geometry) to icon.png / icon.ico / icon.rgba.
 
 Pure Python, no dependencies. Regenerates the shell icon assets from the exact
-frontend favicon geometry. Run:  python3 tools/make_icon.py
+frontend icon geometry: mint rounded-square background with a see-through hole,
+four square-cornered marker-hatched blocks. Run:  python3 tools/make_icon.py
 """
 import math
 import os
@@ -10,35 +11,63 @@ import zlib
 
 GREEN = (0xA8, 0xE6, 0xCF)
 DARK = (0x1A, 0x1A, 0x1A)
-VIEW = 32.0
+VIEW = 512.0
 SS = 4
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 WINDOW_SIZE = 64
 
+BG_RX = 32.0
+HOLE = (402.0, 329.0, 60.0, 60.0)
+# x, y, w, h, hatch angle in degrees from vertical ("/" direction)
+BLOCKS = [
+    (78.0, 52.0, 120.0, 122.0, 45.0),
+    (288.0, 88.0, 80.0, 72.0, 45.0),
+    (70.0, 194.0, 258.0, 208.0, 18.0),
+    (372.0, 208.0, 62.0, 36.0, 45.0),
+]
+LINE_PERIOD = 16.0
+LINE_PHASE = 8.0
+LINE_HALF = 3.5
+STROKE_HALF = 3.0
+
 
 def inside_rrect(x, y):
-    cx = cy = half = 16.0
-    rx = 6.0
-    qx = max(abs(x - cx) - (half - rx), 0.0)
-    qy = max(abs(y - cy) - (half - rx), 0.0)
-    return qx * qx + qy * qy <= rx * rx
+    half = VIEW / 2.0
+    qx = max(abs(x - half) - (half - BG_RX), 0.0)
+    qy = max(abs(y - half) - (half - BG_RX), 0.0)
+    return qx * qx + qy * qy <= BG_RX * BG_RX
 
 
-def inside_circle(x, y):
-    return (x - 10.0) ** 2 + (y - 22.0) ** 2 <= 6.5 ** 2
+def inside_hole(x, y):
+    hx, hy, hw, hh = HOLE
+    return hx <= x < hx + hw and hy <= y < hy + hh
 
 
-def inside_line(x, y):
-    ax, ay, bx, by = 15.0, 17.0, 28.0, 5.0
-    dx, dy = bx - ax, by - ay
-    t = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)
-    t = max(0.0, min(1.0, t))
-    return math.hypot(x - (ax + t * dx), y - (ay + t * dy)) <= 3.5 / 2.0
+def inside_block(b, x, y):
+    return b[0] <= x < b[0] + b[2] and b[1] <= y < b[1] + b[3]
+
+
+def inside_hatch(b, x, y):
+    a = math.radians(b[4])
+    px = math.cos(a) * x + math.sin(a) * y
+    m = (px - LINE_PHASE) % LINE_PERIOD
+    return min(m, LINE_PERIOD - m) <= LINE_HALF
+
+
+def inside_outline(b, x, y):
+    bx, by, bw, bh = b[0], b[1], b[2], b[3]
+    s = STROKE_HALF
+    inside = lambda l, t, r, o: l <= x < r and t <= y < o
+    return (inside(bx - s, by - s, bx + bw + s, by + bh + s)
+            and not inside(bx + s, by + s, bx + bw - s, by + bh - s))
 
 
 def sample(x, y):
-    if inside_line(x, y) or inside_circle(x, y):
-        return DARK[0], DARK[1], DARK[2], 1.0
+    if inside_hole(x, y):
+        return 0.0, 0.0, 0.0, 0.0
+    for b in BLOCKS:
+        if inside_outline(b, x, y) or (inside_block(b, x, y) and inside_hatch(b, x, y)):
+            return DARK[0], DARK[1], DARK[2], 1.0
     if inside_rrect(x, y):
         return GREEN[0], GREEN[1], GREEN[2], 1.0
     return 0.0, 0.0, 0.0, 0.0

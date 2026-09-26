@@ -195,7 +195,7 @@ Toolchain (as pinned): AGP 9.4.0, Gradle 9.6.0 (wrapper committed, sha256 pinned
 | AGP | 9.4.0, `apply false` at root, applied in `:app` | `build.gradle.kts` |
 | Gradle | 9.6.0, `distributionSha256Sum` pinned | `gradle/wrapper/gradle-wrapper.properties` |
 | namespace / applicationId | `com.foton.frontend` | `app/build.gradle.kts` |
-| version | versionCode 3, versionName 0.1.1 | `app/build.gradle.kts` |
+| version | versionCode 4, versionName 0.1.1 | `app/build.gradle.kts` |
 | SDK | compileSdk 36, targetSdk 36, minSdk 26 | `app/build.gradle.kts` |
 | Java | source/target 17 | `compileOptions` |
 | release buildType | `isMinifyEnabled = false` | `app/build.gradle.kts` |
@@ -294,17 +294,22 @@ android/
   app/src/main/java/com/foton/frontend/MainActivity.kt   the whole app
   app/src/main/res/values/{strings,themes}.xml
   app/src/main/res/values-v29/themes.xml                DayNight theme, no action bar
-  app/src/main/res/values/colors.xml                     (launcher icon palette #A8E6CF)
   app/src/main/res/drawable/ic_launcher_foreground.xml
-  app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml     (adaptive favicon icon)
+  app/src/main/res/drawable/ic_launcher_background.xml
+  app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml     (adaptive icon: hatched foreground, green background with a see-thru hole)
   app/src/main/res/xml/network_security_config.xml
 ```
 
-Icon lineage: the same favicon geometry as the desktop, hand-mirrored. The
-desktop rasterizer `tools/make_icon.py` writes `GREEN = 0xA8, 0xE6, 0xCF` and
-`DARK = 0x1A, 0x1A, 0x1A`; here the adaptive icon background is that green and
-the vector foreground strokes are that dark, in a 108x108 viewport. No rasters
-ship in the APK.
+Icon lineage: one SVG drives both targets - `foton-app-icon.svg` in the repo
+root, copied byte-identical to `../assets/favicon.svg`, where the desktop
+rasterizer `tools/make_icon.py` traces it with the constants
+`GREEN = 0xA8, 0xE6, 0xCF` and `DARK = 0x1A, 0x1A, 0x1A`. Here the adaptive
+background drawable (`ic_launcher_background.xml`) is that green with a 60x60
+even-odd hole, so the launcher wallpaper shows through, and the foreground
+vector draws the four hatched blocks as explicit stroke paths in a 512 viewport
+scaled into the 66dp adaptive safe zone - VectorDrawable has no SVG patterns or
+masks, so the 45 and 18 degree hatch segments are precomputed. No rasters ship
+in the APK.
 
 ## Testing the shim
 
